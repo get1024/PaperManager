@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -45,7 +46,10 @@ struct ContentView: View {
                 title: selectedTitle,
                 papers: visiblePapers,
                 selection: $selectedPaperIDs,
-                searchText: $searchText
+                searchText: $searchText,
+                onOpenSelected: openSelectedPDF,
+                onRevealSelected: revealSelectedPDF,
+                onDeleteSelected: deleteSelectedPapers
             )
             .navigationTitle(selectedTitle)
         } detail: {
@@ -75,8 +79,7 @@ struct ContentView: View {
                 }
 
                 Button(role: .destructive) {
-                    store.deletePapers(ids: selectedPaperIDs)
-                    selectedPaperIDs.removeAll()
+                    deleteSelectedPapers()
                 } label: {
                     Label("删除", systemImage: "trash")
                 }
@@ -122,6 +125,75 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerExportBibTeXRequested)) { _ in
             exportBibTeX()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .paperManagerOpenSelectedRequested)) { _ in
+            openSelectedPDF()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .paperManagerRevealSelectedRequested)) { _ in
+            revealSelectedPDF()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .paperManagerDeleteSelectedRequested)) { _ in
+            deleteSelectedPapers()
+        }
+    }
+
+    private var selectedPapers: [Paper] {
+        visiblePapers.filter { selectedPaperIDs.contains($0.id) }
+    }
+
+    private func openSelectedPDF() {
+        guard let paper = selectedPapers.first else { return }
+        guard let attachment = paper.primaryPDF else {
+            store.statusMessage = "这篇文献尚未关联 PDF。"
+            return
+        }
+
+        do {
+            try attachment.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                }
+                if let readerPath = store.settings.defaultPDFReaderPath.nilIfBlank {
+                    let appURL = URL(fileURLWithPath: readerPath)
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
+                        if let error {
+                            Task { @MainActor in
+                                store.statusMessage = "无法使用所选阅读器打开 PDF：\(error.localizedDescription)"
+                            }
+                        }
+                    }
+                } else {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        } catch {
+            store.statusMessage = "无法打开 PDF：\(error.localizedDescription)"
+        }
+    }
+
+    private func revealSelectedPDF() {
+        guard let paper = selectedPapers.first else { return }
+        guard let attachment = paper.primaryPDF else {
+            store.statusMessage = "这篇文献尚未关联 PDF。"
+            return
+        }
+
+        do {
+            try attachment.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                }
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        } catch {
+            store.statusMessage = "无法在 Finder 中显示 PDF：\(error.localizedDescription)"
+        }
+    }
+
+    private func deleteSelectedPapers() {
+        guard !selectedPaperIDs.isEmpty else { return }
+        store.deletePapers(ids: selectedPaperIDs)
+        selectedPaperIDs.removeAll()
     }
 
     private func exportBibTeX() {

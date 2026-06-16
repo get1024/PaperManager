@@ -44,6 +44,22 @@ struct PaperManagerCommands: Commands {
         }
 
         CommandMenu("文库") {
+            Button("打开选中 PDF") {
+                NotificationCenter.default.post(name: .paperManagerOpenSelectedRequested, object: nil)
+            }
+            .keyboardShortcut(.return, modifiers: [])
+
+            Button("在 Finder 中显示") {
+                NotificationCenter.default.post(name: .paperManagerRevealSelectedRequested, object: nil)
+            }
+
+            Button("删除记录") {
+                NotificationCenter.default.post(name: .paperManagerDeleteSelectedRequested, object: nil)
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+
+            Divider()
+
             Button("导出 BibTeX...") {
                 NotificationCenter.default.post(name: .paperManagerExportBibTeXRequested, object: nil)
             }
@@ -57,4 +73,7 @@ extension Notification.Name {
     static let paperManagerDOIRequested = Notification.Name("PaperManagerDOIRequested")
     static let paperManagerManualAddRequested = Notification.Name("PaperManagerManualAddRequested")
     static let paperManagerExportBibTeXRequested = Notification.Name("PaperManagerExportBibTeXRequested")
+    static let paperManagerOpenSelectedRequested = Notification.Name("PaperManagerOpenSelectedRequested")
+    static let paperManagerRevealSelectedRequested = Notification.Name("PaperManagerRevealSelectedRequested")
+    static let paperManagerDeleteSelectedRequested = Notification.Name("PaperManagerDeleteSelectedRequested")
 }

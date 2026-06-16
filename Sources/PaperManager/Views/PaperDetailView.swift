@@ -215,7 +215,7 @@ private struct PaperEditorView: View {
                         }
                         Spacer()
                         Button {
-                            NSWorkspace.shared.open(attachment.url)
+                            openAttachment(attachment)
                         } label: {
                             Label("打开", systemImage: "arrow.up.right")
                         }
@@ -395,30 +395,70 @@ private struct PaperEditorView: View {
     }
 
     private func refreshAnnotations() {
-        guard let pdf = paper.primaryPDF, let document = PDFDocument(url: pdf.url) else { return }
-        paper.annotations = PDFMetadataExtractor.extractAnnotations(from: document)
+        guard let pdf = paper.primaryPDF else { return }
+        do {
+            paper.annotations = try pdf.withResolvedURL { url in
+                guard let document = PDFDocument(url: url) else {
+                    throw PaperManagerError.message("PDFKit 无法读取这个 PDF。")
+                }
+                return PDFMetadataExtractor.extractAnnotations(from: document)
+            }
+        } catch {
+            store.statusMessage = "标注提取失败：\(error.localizedDescription)"
+        }
     }
 
     private func openPrimaryPDF() {
         guard let pdf = paper.primaryPDF else { return }
-        if let readerPath = store.settings.defaultPDFReaderPath.nilIfBlank {
-            let appURL = URL(fileURLWithPath: readerPath)
-            let configuration = NSWorkspace.OpenConfiguration()
-            NSWorkspace.shared.open([pdf.url], withApplicationAt: appURL, configuration: configuration) { _, error in
-                if let error {
-                    Task { @MainActor in
-                        store.statusMessage = "无法使用所选阅读器打开 PDF：\(error.localizedDescription)"
+        do {
+            try pdf.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                }
+                if let readerPath = store.settings.defaultPDFReaderPath.nilIfBlank {
+                    let appURL = URL(fileURLWithPath: readerPath)
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
+                        if let error {
+                            Task { @MainActor in
+                                store.statusMessage = "无法使用所选阅读器打开 PDF：\(error.localizedDescription)"
+                            }
+                        }
                     }
+                } else {
+                    NSWorkspace.shared.open(url)
                 }
             }
-        } else {
-            NSWorkspace.shared.open(pdf.url)
+        } catch {
+            store.statusMessage = "无法打开 PDF：\(error.localizedDescription)"
         }
     }
 
     private func revealPrimaryPDF() {
         guard let pdf = paper.primaryPDF else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([pdf.url])
+        do {
+            try pdf.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                }
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        } catch {
+            store.statusMessage = "无法在 Finder 中显示 PDF：\(error.localizedDescription)"
+        }
+    }
+
+    private func openAttachment(_ attachment: Attachment) {
+        do {
+            try attachment.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message("文件不存在，可能已在 Finder 中移动或删除。")
+                }
+                NSWorkspace.shared.open(url)
+            }
+        } catch {
+            store.statusMessage = "无法打开附件：\(error.localizedDescription)"
+        }
     }
 }
 

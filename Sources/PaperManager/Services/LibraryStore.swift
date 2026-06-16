@@ -103,7 +103,7 @@ final class LibraryStore: ObservableObject {
             case .missingPDF:
                 matchesFilter = !paper.hasPDF
             case .missingIDs:
-                matchesFilter = !paper.hasIdentifier
+                matchesFilter = paper.doi.trimmed.isEmpty
             case .collection(let id):
                 let ids = includeSubcollections ? snapshot.collections.descendantIDs(of: id) : [id]
                 matchesFilter = paper.collectionIDs.contains { ids.contains($0) }
@@ -179,7 +179,9 @@ final class LibraryStore: ObservableObject {
         let deleting = snapshot.papers.filter { ids.contains($0.id) }
         if snapshot.settings.deleteAttachmentsToTrash {
             for attachment in deleting.flatMap(\.attachments) {
-                try? FileManager.default.trashItem(at: attachment.url, resultingItemURL: nil)
+                try? attachment.withResolvedURL { url in
+                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                }
             }
         }
         snapshot.papers.removeAll { ids.contains($0.id) }
@@ -242,10 +244,19 @@ final class LibraryStore: ObservableObject {
         guard let index = snapshot.papers.firstIndex(where: { $0.id == paperID }) else { return }
         var paper = snapshot.papers[index]
         let finalURL = try organizeAttachmentIfNeeded(sourceURL, for: paper)
+        let bookmark = try? finalURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let fileSize = try? finalURL.resourceValues(forKeys: [.fileSizeKey]).fileSize.map(Int64.init)
         let attachment = Attachment(
             kind: kind ?? (finalURL.isPDF ? .pdf : .file),
             filePath: finalURL.path,
-            displayName: finalURL.lastPathComponent
+            displayName: finalURL.lastPathComponent,
+            bookmarkData: bookmark,
+            fileSize: fileSize,
+            missing: !FileManager.default.fileExists(atPath: finalURL.path)
         )
         paper.attachments.removeAll { $0.filePath == finalURL.path }
         paper.attachments.append(attachment)

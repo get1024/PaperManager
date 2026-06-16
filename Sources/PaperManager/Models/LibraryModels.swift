@@ -104,9 +104,81 @@ struct Attachment: Identifiable, Codable, Hashable {
     var kind: AttachmentKind = .file
     var filePath: String
     var displayName: String
+    var bookmarkData: Data?
+    var fileSize: Int64?
+    var missing: Bool = false
     var addedAt: Date = Date()
 
-    var url: URL { URL(fileURLWithPath: filePath) }
+    enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case filePath
+        case displayName
+        case bookmarkData
+        case fileSize
+        case missing
+        case addedAt
+    }
+
+    init(
+        id: UUID = UUID(),
+        kind: AttachmentKind = .file,
+        filePath: String,
+        displayName: String,
+        bookmarkData: Data? = nil,
+        fileSize: Int64? = nil,
+        missing: Bool = false,
+        addedAt: Date = Date()
+    ) {
+        self.id = id
+        self.kind = kind
+        self.filePath = filePath
+        self.displayName = displayName
+        self.bookmarkData = bookmarkData
+        self.fileSize = fileSize
+        self.missing = missing
+        self.addedAt = addedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try container.decodeIfPresent(AttachmentKind.self, forKey: .kind) ?? .file
+        filePath = try container.decodeIfPresent(String.self, forKey: .filePath) ?? ""
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+            ?? URL(fileURLWithPath: filePath).lastPathComponent
+        bookmarkData = try container.decodeIfPresent(Data.self, forKey: .bookmarkData)
+        fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize)
+        missing = try container.decodeIfPresent(Bool.self, forKey: .missing) ?? false
+        addedAt = try container.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
+    }
+
+    var url: URL {
+        (try? resolvedURL()) ?? URL(fileURLWithPath: filePath)
+    }
+
+    func resolvedURL() throws -> URL {
+        if let bookmarkData {
+            var isStale = false
+            let resolved = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            return resolved
+        }
+        return URL(fileURLWithPath: filePath)
+    }
+
+    func withResolvedURL<Result>(_ body: (URL) throws -> Result) throws -> Result {
+        let resolved = try resolvedURL()
+        let didAccess = resolved.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess { resolved.stopAccessingSecurityScopedResource() }
+        }
+        return try body(resolved)
+    }
 }
 
 enum AnnotationKind: String, Codable, CaseIterable, Identifiable {
@@ -233,7 +305,7 @@ struct Paper: Identifiable, Codable, Hashable {
     }
 
     var hasPDF: Bool {
-        attachments.contains { $0.kind == .pdf }
+        attachments.contains { $0.kind == .pdf && !$0.missing }
     }
 
     var primaryPDF: Attachment? {
@@ -283,7 +355,7 @@ enum LibraryFilter: Hashable, Codable {
         case .all: return "全部文献"
         case .unfiled: return "未归类"
         case .missingPDF: return "缺少 PDF"
-        case .missingIDs: return "缺少标识符"
+        case .missingIDs: return "缺少 DOI"
         case .collection: return "文集"
         case .tag: return "标签"
         }

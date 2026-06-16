@@ -14,7 +14,7 @@ struct SidebarView: View {
             Section("文库") {
                 libraryRow("全部文献", systemImage: "books.vertical", count: store.papers.count, filter: .all)
                 libraryRow("未归类", systemImage: "tray", count: store.papers.filter(\.collectionIDs.isEmpty).count, filter: .unfiled)
-                libraryRow("缺少标识符", systemImage: "magnifyingglass.circle", count: store.papers.filter { !$0.hasIdentifier }.count, filter: .missingIDs)
+                libraryRow("缺少 DOI", systemImage: "magnifyingglass.circle", count: store.papers.filter { $0.doi.trimmed.isEmpty }.count, filter: .missingIDs)
                 libraryRow("缺少 PDF", systemImage: "paperclip", count: store.papers.filter { !$0.hasPDF }.count, filter: .missingPDF)
             }
 
