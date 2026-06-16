@@ -1,0 +1,235 @@
+name: Build and Release PaperManager Installer
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create, for example v1.0.0. Leave blank to build only."
+        required: false
+        type: string
+      draft:
+        description: "Create the GitHub release as a draft."
+        required: true
+        default: false
+        type: boolean
+      prerelease:
+        description: "Mark the GitHub release as a prerelease."
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: papermanager-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    name: Build PaperManager macOS installer
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: vars
+        shell: bash
+        env:
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag || '' }}
+        run: |
+          set -euo pipefail
+
+          IS_RELEASE="false"
+          TAG=""
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            IS_RELEASE="true"
+            TAG="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "$MANUAL_RELEASE_TAG" ]]; then
+            IS_RELEASE="true"
+            TAG="$MANUAL_RELEASE_TAG"
+          fi
+
+          if [[ -n "$TAG" && ! "$TAG" =~ ^v[0-9]+(\.[0-9]+){0,2}([.-][A-Za-z0-9._-]+)?$ ]]; then
+            echo "release_tag must look like v1, v1.0, v1.0.0, or v1.0.0-beta.1" >&2
+            exit 1
+          fi
+
+          if [[ "$IS_RELEASE" == "true" ]]; then
+            VERSION="${TAG#v}"
+            INSTALLER_NAME="PaperManager-${TAG}.dmg"
+          else
+            VERSION="0.0.0-ci.${GITHUB_RUN_NUMBER}"
+            INSTALLER_NAME="PaperManager-ci-${GITHUB_RUN_NUMBER}.dmg"
+          fi
+
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "installer_name=$INSTALLER_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Show toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+
+      - name: Swift package compile check
+        shell: bash
+        run: swift build
+
+      - name: Build macOS app bundle
+        shell: bash
+        env:
+          VERSION: ${{ steps.vars.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          DERIVED_DATA="$RUNNER_TEMP/PaperManagerDerivedData"
+          rm -rf "$DERIVED_DATA"
+
+          xcodebuild \
+            -project PaperManager.xcodeproj \
+            -scheme PaperManager \
+            -configuration Release \
+            -destination "platform=macOS" \
+            -derivedDataPath "$DERIVED_DATA" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+
+          APP_PATH="$DERIVED_DATA/Build/Products/Release/PaperManager.app"
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "PaperManager.app was not produced at $APP_PATH" >&2
+            exit 1
+          fi
+
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Ad-hoc sign app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/codesign --force --deep --sign - "$APP_PATH"
+          /usr/bin/codesign --verify --deep --strict "$APP_PATH"
+
+      - name: Package macOS installer DMG
+        id: package
+        shell: bash
+        env:
+          INSTALLER_NAME: ${{ steps.vars.outputs.installer_name }}
+          VERSION: ${{ steps.vars.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          DIST_DIR="$GITHUB_WORKSPACE/dist"
+          DMG_ROOT="$RUNNER_TEMP/PaperManagerDmgRoot"
+          rm -rf "$DIST_DIR"
+          rm -rf "$DMG_ROOT"
+          mkdir -p "$DIST_DIR"
+          mkdir -p "$DMG_ROOT"
+
+          ditto "$APP_PATH" "$DMG_ROOT/PaperManager.app"
+          ln -s /Applications "$DMG_ROOT/Applications"
+
+          hdiutil create \
+            -volname "PaperManager ${VERSION}" \
+            -srcfolder "$DMG_ROOT" \
+            -ov \
+            -format UDZO \
+            "$DIST_DIR/$INSTALLER_NAME"
+
+          (
+            cd "$DIST_DIR"
+            shasum -a 256 "$INSTALLER_NAME" > "$INSTALLER_NAME.sha256"
+          )
+
+          echo "installer_path=$DIST_DIR/$INSTALLER_NAME" >> "$GITHUB_OUTPUT"
+          echo "sha_path=$DIST_DIR/$INSTALLER_NAME.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.vars.outputs.installer_name }}
+          path: |
+            ${{ steps.package.outputs.installer_path }}
+            ${{ steps.package.outputs.sha_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create tag for manual release
+        if: steps.vars.outputs.is_release == 'true' && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists."
+          else
+            git tag -a "$TAG" -m "PaperManager $TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create or update GitHub release
+        if: steps.vars.outputs.is_release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.vars.outputs.tag }}
+          VERSION: ${{ steps.vars.outputs.version }}
+          INSTALLER_PATH: ${{ steps.package.outputs.installer_path }}
+          SHA_PATH: ${{ steps.package.outputs.sha_path }}
+          DRAFT: ${{ inputs.draft || 'false' }}
+          PRERELEASE: ${{ inputs.prerelease || 'false' }}
+        run: |
+          set -euo pipefail
+
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          cat > "$NOTES_FILE" <<EOF
+          PaperManager ${VERSION}
+
+          This release contains a macOS DMG installer:
+
+          - PaperManager.app inside a drag-to-Applications DMG
+          - SHA-256 checksum file
+
+          The app is ad-hoc signed by CI. It is not notarized.
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$INSTALLER_PATH" "$SHA_PATH" --clobber
+          else
+            ARGS=()
+            if [[ "$DRAFT" == "true" ]]; then
+              ARGS+=(--draft)
+            fi
+            if [[ "$PRERELEASE" == "true" ]]; then
+              ARGS+=(--prerelease)
+            fi
+
+            gh release create "$TAG" \
+              "$INSTALLER_PATH" \
+              "$SHA_PATH" \
+              --title "PaperManager $TAG" \
+              --notes-file "$NOTES_FILE" \
+              "${ARGS[@]}"
+          fi

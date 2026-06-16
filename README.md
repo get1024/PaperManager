@@ -66,6 +66,16 @@ BibTeX, RIS, or detailed Markdown
 
 If no rows are selected, export commands operate on the visible filter result.
 
+### 3.4 GitHub Release
+
+The repository includes a GitHub Actions workflow at `.github/workflows/release.yml`.
+
+- Pushes to `main` build a macOS DMG and upload it as a workflow artifact.
+- Pushing a tag such as `v1.0.0` builds `PaperManager-v1.0.0.dmg` and publishes a GitHub Release.
+- Manual workflow runs can create a release by filling the `release_tag` input.
+
+The DMG contains `PaperManager.app` and an `/Applications` shortcut for drag-to-install distribution. CI ad-hoc signs the app bundle, but it does not notarize it.
+
 ## 4. Technical Details
 
 ### 4.1 Storage
