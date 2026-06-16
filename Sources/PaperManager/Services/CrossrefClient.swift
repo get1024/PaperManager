@@ -38,45 +38,51 @@ struct PaperMetadata: Codable, Hashable {
     var eventDate: String = ""
     var venue: String = ""
 
-    func merged(into paper: Paper) -> Paper {
+    func merged(into paper: Paper, replaceExisting: Bool = false) -> Paper {
         var result = paper
-        if result.title.trimmed.isEmpty, !title.isEmpty { result.title = title }
-        if (result.subtitle ?? "").trimmed.isEmpty, !subtitle.isEmpty { result.subtitle = subtitle }
-        if result.authors.isEmpty, !authors.isEmpty { result.authors = authors }
-        if (result.editors ?? []).isEmpty, !editors.isEmpty { result.editors = editors }
-        if (result.translators ?? []).isEmpty, !translators.isEmpty { result.translators = translators }
-        if result.year == nil { result.year = year }
-        if result.journal.trimmed.isEmpty { result.journal = journal }
-        if result.bookTitle.trimmed.isEmpty { result.bookTitle = bookTitle }
-        if result.publisher.trimmed.isEmpty { result.publisher = publisher }
-        if (result.address ?? "").trimmed.isEmpty, !address.isEmpty { result.address = address }
-        if result.volume.trimmed.isEmpty { result.volume = volume }
-        if result.issue.trimmed.isEmpty { result.issue = issue }
-        if result.pages.trimmed.isEmpty { result.pages = pages }
-        if result.doi.trimmed.isEmpty { result.doi = doi }
-        if result.isbn.trimmed.isEmpty { result.isbn = isbn }
-        if result.url.trimmed.isEmpty { result.url = url }
-        if (result.urlDate ?? "").trimmed.isEmpty, !urlDate.isEmpty { result.urlDate = urlDate }
-        if result.abstract.trimmed.isEmpty { result.abstract = abstract }
-        if result.edition.trimmed.isEmpty { result.edition = edition }
-        if result.series.trimmed.isEmpty { result.series = series }
-        if result.chapter.trimmed.isEmpty { result.chapter = chapter }
-        if result.institution.trimmed.isEmpty { result.institution = institution }
-        if result.school.trimmed.isEmpty { result.school = school }
-        if (result.type ?? "").trimmed.isEmpty, !type.isEmpty { result.type = type }
-        if result.howPublished.trimmed.isEmpty { result.howPublished = howPublished }
-        if (result.organization ?? "").trimmed.isEmpty, !organization.isEmpty { result.organization = organization }
-        if result.language.trimmed.isEmpty { result.language = language }
-        if result.month.trimmed.isEmpty { result.month = month }
-        if result.eprint.trimmed.isEmpty { result.eprint = eprint }
-        if result.eprintType.trimmed.isEmpty { result.eprintType = eprintType }
-        if result.eprintClass.trimmed.isEmpty { result.eprintClass = eprintClass }
-        if result.publicationState.trimmed.isEmpty { result.publicationState = publicationState }
-        if result.event.trimmed.isEmpty { result.event = eventTitle }
-        if result.eventDate.trimmed.isEmpty { result.eventDate = eventDate }
-        if result.venue.trimmed.isEmpty { result.venue = venue }
-        result.paperType = paperType
+        if shouldFill(result.title, with: title, replaceExisting: replaceExisting) { result.title = title }
+        if shouldFill(result.subtitle ?? "", with: subtitle, replaceExisting: replaceExisting) { result.subtitle = subtitle.nilIfBlank }
+        if (replaceExisting || result.authors.isEmpty), !authors.isEmpty { result.authors = authors }
+        if (replaceExisting || (result.editors ?? []).isEmpty), !editors.isEmpty { result.editors = editors }
+        if (replaceExisting || (result.translators ?? []).isEmpty), !translators.isEmpty { result.translators = translators }
+        if (replaceExisting || result.year == nil), let year { result.year = year }
+        if shouldFill(result.journal, with: journal, replaceExisting: replaceExisting) { result.journal = journal }
+        if shouldFill(result.bookTitle, with: bookTitle, replaceExisting: replaceExisting) { result.bookTitle = bookTitle }
+        if shouldFill(result.publisher, with: publisher, replaceExisting: replaceExisting) { result.publisher = publisher }
+        if shouldFill(result.address ?? "", with: address, replaceExisting: replaceExisting) { result.address = address.nilIfBlank }
+        if shouldFill(result.volume, with: volume, replaceExisting: replaceExisting) { result.volume = volume }
+        if shouldFill(result.issue, with: issue, replaceExisting: replaceExisting) { result.issue = issue }
+        if shouldFill(result.pages, with: pages, replaceExisting: replaceExisting) { result.pages = pages }
+        if shouldFill(result.doi, with: doi, replaceExisting: replaceExisting) { result.doi = doi }
+        if shouldFill(result.isbn, with: isbn, replaceExisting: replaceExisting) { result.isbn = isbn }
+        if shouldFill(result.url, with: url, replaceExisting: replaceExisting) { result.url = url }
+        if shouldFill(result.urlDate ?? "", with: urlDate, replaceExisting: replaceExisting) { result.urlDate = urlDate.nilIfBlank }
+        if shouldFill(result.abstract, with: abstract, replaceExisting: replaceExisting) { result.abstract = abstract }
+        if shouldFill(result.edition, with: edition, replaceExisting: replaceExisting) { result.edition = edition }
+        if shouldFill(result.series, with: series, replaceExisting: replaceExisting) { result.series = series }
+        if shouldFill(result.chapter, with: chapter, replaceExisting: replaceExisting) { result.chapter = chapter }
+        if shouldFill(result.institution, with: institution, replaceExisting: replaceExisting) { result.institution = institution }
+        if shouldFill(result.school, with: school, replaceExisting: replaceExisting) { result.school = school }
+        if shouldFill(result.type ?? "", with: type, replaceExisting: replaceExisting) { result.type = type.nilIfBlank }
+        if shouldFill(result.howPublished, with: howPublished, replaceExisting: replaceExisting) { result.howPublished = howPublished }
+        if shouldFill(result.organization ?? "", with: organization, replaceExisting: replaceExisting) { result.organization = organization.nilIfBlank }
+        if shouldFill(result.language, with: language, replaceExisting: replaceExisting) { result.language = language }
+        if shouldFill(result.month, with: month, replaceExisting: replaceExisting) { result.month = month }
+        if shouldFill(result.eprint, with: eprint, replaceExisting: replaceExisting) { result.eprint = eprint }
+        if shouldFill(result.eprintType, with: eprintType, replaceExisting: replaceExisting) { result.eprintType = eprintType }
+        if shouldFill(result.eprintClass, with: eprintClass, replaceExisting: replaceExisting) { result.eprintClass = eprintClass }
+        if shouldFill(result.publicationState, with: publicationState, replaceExisting: replaceExisting) { result.publicationState = publicationState }
+        if shouldFill(result.event, with: eventTitle, replaceExisting: replaceExisting) { result.event = eventTitle }
+        if shouldFill(result.eventDate, with: eventDate, replaceExisting: replaceExisting) { result.eventDate = eventDate }
+        if shouldFill(result.venue, with: venue, replaceExisting: replaceExisting) { result.venue = venue }
+        if replaceExisting || result.paperType == .misc {
+            result.paperType = paperType
+        }
         return result
+    }
+
+    private func shouldFill(_ current: String, with incoming: String, replaceExisting: Bool) -> Bool {
+        !incoming.trimmed.isEmpty && (replaceExisting || current.trimmed.isEmpty)
     }
 
     var asPaper: Paper {

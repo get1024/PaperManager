@@ -318,11 +318,35 @@ struct Paper: Identifiable, Codable, Hashable {
         !eprint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var arxivLookupID: String? {
+        let cleanEprint = eprint.trimmed
+        if eprintType.lowercased().contains("arxiv"), !cleanEprint.isEmpty {
+            return cleanEprint
+        }
+        if cleanEprint.looksLikeArxivID {
+            return cleanEprint
+        }
+        let normalizedDOI = doi.trimmed.lowercased()
+        let prefix = "10.48550/arxiv."
+        if normalizedDOI.hasPrefix(prefix) {
+            return String(doi.trimmed.dropFirst(prefix.count)).nilIfBlank
+        }
+        return nil
+    }
+
     private static func splitNameList(_ value: String) -> [String] {
         value
             .split(separator: ";")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    func hasSameEditableContent(as other: Paper) -> Bool {
+        var lhs = self
+        var rhs = other
+        lhs.dateModified = .distantPast
+        rhs.dateModified = .distantPast
+        return lhs == rhs
     }
 }
 
@@ -347,6 +371,7 @@ enum LibraryFilter: Hashable, Codable {
     case unfiled
     case missingPDF
     case missingIDs
+    case noTags
     case collection(UUID)
     case tag(UUID)
 
@@ -356,6 +381,7 @@ enum LibraryFilter: Hashable, Codable {
         case .unfiled: return "未归类"
         case .missingPDF: return "缺少 PDF"
         case .missingIDs: return "缺少 DOI"
+        case .noTags: return "无标签"
         case .collection: return "文集"
         case .tag: return "标签"
         }

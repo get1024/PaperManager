@@ -104,6 +104,8 @@ final class LibraryStore: ObservableObject {
                 matchesFilter = !paper.hasPDF
             case .missingIDs:
                 matchesFilter = paper.doi.trimmed.isEmpty
+            case .noTags:
+                matchesFilter = paper.tagIDs.isEmpty
             case .collection(let id):
                 let ids = includeSubcollections ? snapshot.collections.descendantIDs(of: id) : [id]
                 matchesFilter = paper.collectionIDs.contains { ids.contains($0) }
@@ -166,6 +168,7 @@ final class LibraryStore: ObservableObject {
 
     func updatePaper(_ paper: Paper) {
         guard let index = snapshot.papers.firstIndex(where: { $0.id == paper.id }) else { return }
+        guard !snapshot.papers[index].hasSameEditableContent(as: paper) else { return }
         var updated = paper
         updated.dateModified = Date()
         if updated.citekey.trimmed.isEmpty {
@@ -212,6 +215,19 @@ final class LibraryStore: ObservableObject {
         save()
     }
 
+    func addPapers(ids: Set<UUID>, toCollection collectionID: UUID) {
+        guard snapshot.collections.contains(where: { $0.id == collectionID }) else { return }
+        var didChange = false
+        for index in snapshot.papers.indices where ids.contains(snapshot.papers[index].id) {
+            if !snapshot.papers[index].collectionIDs.contains(collectionID) {
+                snapshot.papers[index].collectionIDs.append(collectionID)
+                snapshot.papers[index].dateModified = Date()
+                didChange = true
+            }
+        }
+        if didChange { save() }
+    }
+
     @discardableResult
     func addTag(name: String = "New Tag", colorHex: String = "#5B8DEF") -> UUID {
         let tag = PaperTag(name: uniqueTagName(base: name), colorHex: colorHex, sortIndex: snapshot.tags.count)
@@ -238,6 +254,19 @@ final class LibraryStore: ObservableObject {
             snapshot.papers[index].tagIDs.removeAll { $0 == id }
         }
         save()
+    }
+
+    func addPapers(ids: Set<UUID>, toTag tagID: UUID) {
+        guard snapshot.tags.contains(where: { $0.id == tagID }) else { return }
+        var didChange = false
+        for index in snapshot.papers.indices where ids.contains(snapshot.papers[index].id) {
+            if !snapshot.papers[index].tagIDs.contains(tagID) {
+                snapshot.papers[index].tagIDs.append(tagID)
+                snapshot.papers[index].dateModified = Date()
+                didChange = true
+            }
+        }
+        if didChange { save() }
     }
 
     func attachFile(_ sourceURL: URL, to paperID: UUID, kind: AttachmentKind? = nil) throws {

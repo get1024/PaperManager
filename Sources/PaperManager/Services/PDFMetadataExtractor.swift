@@ -30,8 +30,9 @@ enum PDFMetadataExtractor {
         if let doi = extractDOI(from: text) {
             paper.doi = doi
         }
-        if paper.annotations.isEmpty {
-            paper.annotations = extractAnnotations(from: document)
+        if let arxivID = extractArxivID(from: text) {
+            paper.eprint = arxivID
+            paper.eprintType = "arxiv"
         }
         return paper
     }
@@ -56,6 +57,27 @@ enum PDFMetadataExtractor {
         }
         return String(text[swiftRange])
             .trimmingCharacters(in: CharacterSet(charactersIn: " .,\n\r\t);]}>"))
+    }
+
+    static func extractArxivID(from text: String) -> String? {
+        let patterns = [
+            #"(?i)\barxiv\s*:\s*([a-z.-]+/\d{7}|\d{4}\.\d{4,5})(v\d+)?"#,
+            #"(?i)\barxiv\.org/(?:abs|pdf)/([a-z.-]+/\d{7}|\d{4}\.\d{4,5})(v\d+)?(?:\.pdf)?"#
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            guard let match = regex.firstMatch(in: text, range: range),
+                  let idRange = Range(match.range(at: 1), in: text) else {
+                continue
+            }
+            let version = match.numberOfRanges > 2
+                ? Range(match.range(at: 2), in: text).map { String(text[$0]) } ?? ""
+                : ""
+            return String(text[idRange]) + version
+        }
+        return nil
     }
 
     static func extractAnnotations(from document: PDFDocument) -> [ResearchAnnotation] {

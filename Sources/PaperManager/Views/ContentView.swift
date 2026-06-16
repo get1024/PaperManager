@@ -1,4 +1,4 @@
-import AppKit
+ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -39,8 +39,10 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 selectedFilter: $selectedFilter,
+                searchText: $searchText,
                 includeSubcollections: $includeSubcollections
             )
+            .navigationSplitViewColumnWidth(min: 220, ideal: 252, max: 292)
         } content: {
             PaperListView(
                 title: selectedTitle,
@@ -49,13 +51,14 @@ struct ContentView: View {
                 searchText: $searchText,
                 onOpenSelected: openSelectedPDF,
                 onRevealSelected: revealSelectedPDF,
-                onDeleteSelected: deleteSelectedPapers
+                onDeleteSelected: deleteSelectedPapers,
+                onImportURLs: importURLs
             )
             .navigationTitle(selectedTitle)
         } detail: {
             PaperDetailView(selection: $selectedPaperIDs)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 360, max: 430)
         }
-        .searchable(text: $searchText, prompt: "搜索文献")
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -66,6 +69,7 @@ struct ContentView: View {
                 } label: {
                     Label("添加", systemImage: "plus")
                 }
+                .labelStyle(.iconOnly)
 
                 Menu {
                     Button("导出 BibTeX...") { exportBibTeX() }
@@ -77,14 +81,15 @@ struct ContentView: View {
                 } label: {
                     Label("导出", systemImage: "square.and.arrow.up")
                 }
+                .labelStyle(.iconOnly)
 
-                Button(role: .destructive) {
-                    deleteSelectedPapers()
+                Button {
+                    columnVisibility = columnVisibility == .all ? .doubleColumn : .all
                 } label: {
-                    Label("删除", systemImage: "trash")
+                    Label("切换检查器", systemImage: "sidebar.right")
                 }
-                .disabled(selectedPaperIDs.isEmpty)
-                .help("删除所选文献")
+                .labelStyle(.iconOnly)
+                .help("显示或隐藏检查器")
             }
         }
         .fileImporter(
@@ -93,7 +98,7 @@ struct ContentView: View {
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result {
-                Task { await ImportService.importURLs(urls, into: store, targetFilter: selectedFilter) }
+                importURLs(urls)
             }
         }
         .sheet(isPresented: $showManualAdd) {
@@ -194,6 +199,10 @@ struct ContentView: View {
         guard !selectedPaperIDs.isEmpty else { return }
         store.deletePapers(ids: selectedPaperIDs)
         selectedPaperIDs.removeAll()
+    }
+
+    private func importURLs(_ urls: [URL]) {
+        Task { await ImportService.importURLs(urls, into: store, targetFilter: selectedFilter) }
     }
 
     private func exportBibTeX() {

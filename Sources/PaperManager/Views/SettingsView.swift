@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,29 +7,59 @@ struct SettingsView: View {
     @State private var selectedPane: SettingsPane = .general
 
     var body: some View {
-        TabView(selection: $selectedPane) {
-            general
-                .tabItem { Label(SettingsPane.general.title, systemImage: SettingsPane.general.systemImage) }
-                .tag(SettingsPane.general)
+        HStack(spacing: 0) {
+            settingsSidebar
 
-            citation
-                .tabItem { Label(SettingsPane.citation.title, systemImage: SettingsPane.citation.systemImage) }
-                .tag(SettingsPane.citation)
+            Divider()
 
-            localAPISettings
-                .tabItem { Label(SettingsPane.localAPI.title, systemImage: SettingsPane.localAPI.systemImage) }
-                .tag(SettingsPane.localAPI)
+            VStack(alignment: .leading, spacing: 18) {
+                Text("PaperManager 设置")
+                    .font(.system(size: 28, weight: .bold))
+                    .padding(.top, 28)
 
-            backup
-                .tabItem { Label(SettingsPane.backup.title, systemImage: SettingsPane.backup.systemImage) }
-                .tag(SettingsPane.backup)
-
-            templates
-                .tabItem { Label(SettingsPane.templates.title, systemImage: SettingsPane.templates.systemImage) }
-                .tag(SettingsPane.templates)
+                selectedContent
+                    .formStyle(.grouped)
+                    .scrollContentBackground(.hidden)
+            }
+            .padding(.horizontal, 30)
+            .padding(.bottom, 26)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
-        .padding()
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
+    }
+
+    private var settingsSidebar: some View {
+        List(selection: $selectedPane) {
+            ForEach(SettingsPane.allCases) { pane in
+                Label(pane.title, systemImage: pane.systemImage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .tag(pane)
+            }
+        }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .top) {
+            Color.clear.frame(height: 52)
+        }
+        .frame(width: 224)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    @ViewBuilder
+    private var selectedContent: some View {
+        switch selectedPane {
+        case .general:
+            general
+        case .citation:
+            citation
+        case .localAPI:
+            localAPISettings
+        case .backup:
+            backup
+        case .templates:
+            templates
+        }
     }
 
     private var general: some View {

@@ -97,15 +97,10 @@ struct RatingDisplay: View {
 
     var body: some View {
         HStack(spacing: 1) {
-            if rating == 0 {
-                Text("Unrated")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(1...5, id: \.self) { value in
-                    Image(systemName: value <= rating ? "star.fill" : "star")
-                        .foregroundStyle(value <= rating ? .yellow : .secondary)
-                        .imageScale(.small)
-                }
+            ForEach(1...5, id: \.self) { value in
+                Image(systemName: value <= rating ? "star.fill" : "star")
+                    .foregroundStyle(value <= rating ? .yellow : .secondary)
+                    .imageScale(.small)
             }
         }
     }

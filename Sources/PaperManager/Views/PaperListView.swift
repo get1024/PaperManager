@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PaperListView: View {
     let title: String
@@ -8,59 +9,63 @@ struct PaperListView: View {
     var onOpenSelected: () -> Void
     var onRevealSelected: () -> Void
     var onDeleteSelected: () -> Void
+    var onImportURLs: ([URL]) -> Void
 
     var body: some View {
         Group {
             if papers.isEmpty {
                 PaperManagerEmptyState(
-                    systemImage: searchText.isEmpty ? "doc.text" : "magnifyingglass",
+                    systemImage: "doc.text",
                     title: searchText.isEmpty ? "暂无文献" : "没有结果",
-                    message: searchText.isEmpty ? "导入 PDF、BibTeX 文件，或通过 DOI、arXiv、ISBN 添加文献。" : "换一个标题、作者、期刊、年份或 citekey 试试。"
+                    message: searchText.isEmpty ? "导入 PDF、BibTeX 文件，或通过 DOI 添加文献。" : "换一个标题、作者、来源、年份或 DOI 试试。"
                 )
             } else {
                 Table(papers, selection: $selection) {
-                    TableColumn("Title") { paper in
+                    TableColumn("标题") { paper in
                         PaperTitleCell(paper: paper)
+                            .onDrag {
+                                NSItemProvider(object: dragPayload(for: paper) as NSString)
+                            }
                     }
                     .width(min: 240, ideal: 360)
 
-                    TableColumn("Authors") { paper in
+                    TableColumn("作者") { paper in
                         Text(paper.authorsDisplay)
                             .lineLimit(1)
                             .foregroundStyle(paper.authors.isEmpty ? .secondary : .primary)
                     }
                     .width(min: 140, ideal: 220)
 
-                    TableColumn("Year") { paper in
+                    TableColumn("年份") { paper in
                         Text(paper.year.map(String.init) ?? "")
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 52, ideal: 64, max: 80)
 
-                    TableColumn("Source") { paper in
+                    TableColumn("来源") { paper in
                         Text(paper.sourceDisplay)
                             .lineLimit(1)
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 120, ideal: 180)
 
-                    TableColumn("DOI") { paper in
-                        Text(paper.doi)
-                            .lineLimit(1)
-                            .foregroundStyle(paper.doi.isEmpty ? .secondary : .primary)
-                    }
-                    .width(min: 120, ideal: 180)
-
-                    TableColumn("Rating") { paper in
+                    TableColumn("评分") { paper in
                         RatingDisplay(rating: paper.rating)
                     }
                     .width(min: 68, ideal: 80, max: 96)
 
-                    TableColumn("Added") { paper in
-                        Text(paper.dateAdded, format: .dateTime.year().month().day())
+                    TableColumn("添加日期") { paper in
+                        Text(Self.dateFormatter.string(from: paper.dateAdded))
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 92, ideal: 110, max: 130)
+
+                    TableColumn("备注") { paper in
+                        Text(remarkPreview(for: paper))
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
+                    .width(min: 140, ideal: 220)
                 }
                 .contextMenu {
                     Button("打开 PDF") { onOpenSelected() }
@@ -73,6 +78,7 @@ struct PaperListView: View {
                 }
             }
         }
+        .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil, perform: importDroppedItems)
         .safeAreaInset(edge: .bottom) {
             footer
         }
@@ -92,6 +98,51 @@ struct PaperListView: View {
         .padding(.vertical, 5)
         .background(.bar)
     }
+
+    private func dragPayload(for paper: Paper) -> String {
+        let ids = selection.contains(paper.id) && !selection.isEmpty ? selection : [paper.id]
+        return "papermanager-paper-ids:" + ids.map(\.uuidString).joined(separator: ",")
+    }
+
+    private func remarkPreview(for paper: Paper) -> String {
+        if let notes = paper.notes.nilIfBlank {
+            return notes.replacingOccurrences(of: "\n", with: " ")
+        }
+        if let abstract = paper.abstract.nilIfBlank {
+            return abstract.replacingOccurrences(of: "\n", with: " ")
+        }
+        return ""
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/M/d"
+        return formatter
+    }()
+
+    private func importDroppedItems(_ providers: [NSItemProvider]) -> Bool {
+        var didFindFileURL = false
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            didFindFileURL = true
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let url: URL?
+                if let fileURL = item as? URL {
+                    url = fileURL
+                } else if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else {
+                    url = nil
+                }
+
+                if let url {
+                    DispatchQueue.main.async {
+                        onImportURLs([url])
+                    }
+                }
+            }
+        }
+        return didFindFileURL
+    }
 }
 
 private struct PaperTitleCell: View {
@@ -99,19 +150,16 @@ private struct PaperTitleCell: View {
 
     var body: some View {
         HStack(spacing: 7) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 12)
             Image(systemName: paper.hasPDF ? "doc.richtext" : "doc.text")
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(paper.displayTitle)
-                    .lineLimit(1)
-                if !paper.citekey.isEmpty {
-                    Text(paper.citekey)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
+            Text(paper.displayTitle)
+                .fontWeight(.semibold)
+                .lineLimit(1)
         }
     }
 }

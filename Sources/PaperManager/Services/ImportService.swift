@@ -73,7 +73,9 @@ enum ImportService {
     }
 
     private static func importPDF(_ url: URL, into store: LibraryStore, targetFilter: LibraryFilter?) async throws {
-        var paper = PDFMetadataExtractor.extract(from: url)
+        var paper = await Task.detached(priority: .userInitiated) {
+            PDFMetadataExtractor.extract(from: url)
+        }.value
         if let metadata = try? await enrichIfPossible(paper: paper) {
             paper = metadata
         }
@@ -83,9 +85,13 @@ enum ImportService {
     }
 
     private static func enrichIfPossible(paper: Paper) async throws -> Paper {
-        guard !paper.doi.trimmed.isEmpty else { return paper }
-        let metadata = try await CrossrefClient.fetch(doi: paper.doi)
-        return metadata.merged(into: paper)
+        let metadata = try await MetadataLookupClient.lookup(
+            doi: paper.doi.nilIfBlank,
+            arxivID: paper.arxivLookupID,
+            isbn: nil,
+            title: nil
+        )
+        return metadata.merged(into: paper, replaceExisting: true)
     }
 
     private static func expand(urls: [URL]) -> [URL] {
