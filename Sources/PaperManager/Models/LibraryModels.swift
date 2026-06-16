@@ -201,6 +201,78 @@ struct ResearchAnnotation: Identifiable, Codable, Hashable {
     var colorHex: String = "#FFD166"
     var selectedText: String = ""
     var note: String = ""
+    var bounds: CGRectCodable?
+    var imageFilePath: String?
+    var createdAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case page
+        case pageLabel
+        case kind
+        case colorHex
+        case selectedText
+        case note
+        case bounds
+        case imageFilePath
+        case createdAt
+    }
+
+    init(
+        id: UUID = UUID(),
+        page: Int = 1,
+        pageLabel: String = "",
+        kind: AnnotationKind = .highlight,
+        colorHex: String = "#FFD166",
+        selectedText: String = "",
+        note: String = "",
+        bounds: CGRectCodable? = nil,
+        imageFilePath: String? = nil,
+        createdAt: Date? = nil
+    ) {
+        self.id = id
+        self.page = page
+        self.pageLabel = pageLabel
+        self.kind = kind
+        self.colorHex = colorHex
+        self.selectedText = selectedText
+        self.note = note
+        self.bounds = bounds
+        self.imageFilePath = imageFilePath
+        self.createdAt = createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 1
+        pageLabel = try container.decodeIfPresent(String.self, forKey: .pageLabel) ?? ""
+        kind = try container.decodeIfPresent(AnnotationKind.self, forKey: .kind) ?? .highlight
+        colorHex = try container.decodeIfPresent(String.self, forKey: .colorHex) ?? "#FFD166"
+        selectedText = try container.decodeIfPresent(String.self, forKey: .selectedText) ?? ""
+        note = try container.decodeIfPresent(String.self, forKey: .note) ?? ""
+        bounds = try container.decodeIfPresent(CGRectCodable.self, forKey: .bounds)
+        imageFilePath = try container.decodeIfPresent(String.self, forKey: .imageFilePath)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+}
+
+struct CGRectCodable: Codable, Hashable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+
+    init(_ rect: CGRect) {
+        x = rect.origin.x
+        y = rect.origin.y
+        width = rect.size.width
+        height = rect.size.height
+    }
+
+    var cgRect: CGRect {
+        CGRect(x: x, y: y, width: width, height: height)
+    }
 }
 
 struct CustomField: Identifiable, Codable, Hashable {
@@ -260,6 +332,7 @@ struct Paper: Identifiable, Codable, Hashable {
     var customFields: [CustomField] = []
     var dateAdded: Date = Date()
     var dateModified: Date = Date()
+    var lastOpenedAt: Date?
 
     var displayTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Paper" : title
@@ -368,24 +441,61 @@ struct PaperTag: Identifiable, Codable, Hashable {
 
 enum LibraryFilter: Hashable, Codable {
     case all
+    case recentlyAdded
+    case recentlyOpened
     case unfiled
     case missingPDF
     case missingIDs
     case noTags
+    case rating(Int)
     case collection(UUID)
     case tag(UUID)
 
     var title: String {
         switch self {
         case .all: return "全部文献"
+        case .recentlyAdded: return "最近添加"
+        case .recentlyOpened: return "最近打开"
         case .unfiled: return "未归类"
         case .missingPDF: return "缺少 PDF"
-        case .missingIDs: return "缺少 DOI"
+        case .missingIDs: return "缺少标识符"
         case .noTags: return "无标签"
+        case .rating(let value): return value > 0 ? "\(value) 星" : "未评分"
         case .collection: return "文集"
         case .tag: return "标签"
         }
     }
+}
+
+enum PaperSortField: String, Codable, CaseIterable, Identifiable {
+    case title
+    case authors
+    case year
+    case source
+    case rating
+    case dateAdded
+    case lastOpened
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .title: return "标题"
+        case .authors: return "作者"
+        case .year: return "年份"
+        case .source: return "来源"
+        case .rating: return "评分"
+        case .dateAdded: return "添加日期"
+        case .lastOpened: return "最近打开"
+        }
+    }
+}
+
+struct PaperSortDescriptor: Codable, Hashable {
+    var field: PaperSortField = .dateAdded
+    var ascending: Bool = false
+
+    static let defaultValue = PaperSortDescriptor()
 }
 
 struct LibrarySnapshot: Codable {

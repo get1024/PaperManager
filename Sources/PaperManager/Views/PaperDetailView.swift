@@ -101,7 +101,7 @@ private struct PaperEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             inspectorTabBar
-                .padding(.top, 16)
+                .padding(.top, 12)
 
             Divider()
 
@@ -109,11 +109,7 @@ private struct PaperEditorView: View {
                 if selectedTab == .metadata {
                     metadataInspector
                 } else {
-                    Form {
-                        annotationSection
-                    }
-                    .formStyle(.grouped)
-                    .scrollContentBackground(.hidden)
+                    annotationInspector
                 }
             }
         }
@@ -126,9 +122,9 @@ private struct PaperEditorView: View {
                 Button {
                     selectedTab = tab
                 } label: {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 7) {
                         Text(tab.title)
-                            .font(.headline)
+                            .font(PMTypography.headline)
                             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
                         Rectangle()
                             .fill(selectedTab == tab ? Color.accentColor : Color.clear)
@@ -145,7 +141,7 @@ private struct PaperEditorView: View {
 
     private var metadataInspector: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 header
 
                 InspectorSection(title: "引用") {
@@ -224,7 +220,7 @@ private struct PaperEditorView: View {
                         if showExportPreview {
                             ScrollView(.horizontal) {
                                 Text(TemplateRenderer.renderMetadata(paper: paper, snapshot: store.snapshot, includeAnnotations: false))
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(PMTypography.monospacedCaption)
                                     .textSelection(.enabled)
                                     .padding(.top, 8)
                             }
@@ -232,10 +228,61 @@ private struct PaperEditorView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
         }
         .scrollIndicators(.visible)
+    }
+
+    private var annotationInspector: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                paperIdentityHeader
+
+                if paper.annotations.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("暂无标注")
+                            .font(PMTypography.headline)
+                        Text("从已关联 PDF 中提取高亮、批注和形状标注。")
+                            .font(PMTypography.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    if paper.annotations.count > 80 {
+                        Text("当前仅显示前 80 条标注，导出时仍会包含全部标注。")
+                            .font(PMTypography.captionRegular)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(paper.annotations.prefix(80))) { annotation in
+                            AnnotationInspectorRow(annotation: annotation)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
+        }
+        .scrollIndicators(.visible)
+    }
+
+    private var paperIdentityHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(paper.displayTitle)
+                .font(PMTypography.paperTitle)
+                .lineLimit(2...4)
+                .textSelection(.enabled)
+
+            if !paper.authorsDisplay.trimmed.isEmpty {
+                Text(paper.authorsDisplay)
+                    .font(PMTypography.paperCallout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1...3)
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     private var basicSection: some View {
@@ -299,7 +346,7 @@ private struct PaperEditorView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     TextField("标题", text: $paper.title, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 18, weight: .bold))
+                        .font(PMTypography.paperTitle)
                         .lineLimit(2...4)
 
                     TextField("作者", text: Binding(
@@ -307,13 +354,13 @@ private struct PaperEditorView: View {
                         set: { paper.authorsText = $0 }
                     ), axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.callout.weight(.semibold))
+                    .font(PMTypography.paperCallout)
                     .foregroundStyle(.secondary)
                     .lineLimit(1...3)
 
                     TextField("Citekey", text: $paper.citekey)
                         .textFieldStyle(.plain)
-                        .font(.caption.weight(.semibold))
+                        .font(PMTypography.paperCaption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -465,7 +512,7 @@ private struct PaperEditorView: View {
             if paper.attachments.isEmpty {
                 Text("尚未关联 PDF 或附件。")
                     .foregroundStyle(.secondary)
-                    .font(.callout)
+                    .font(PMTypography.callout)
             } else {
                 ForEach(paper.attachments) { attachment in
                     HStack(spacing: 8) {
@@ -476,7 +523,7 @@ private struct PaperEditorView: View {
                             Text(attachment.displayName)
                                 .lineLimit(1)
                             Text(attachment.filePath)
-                                .font(.caption)
+                                .font(PMTypography.captionRegular)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -506,6 +553,7 @@ private struct PaperEditorView: View {
         InspectorValueRow(title: title) {
             TextField("—", text: text, axis: axis)
                 .textFieldStyle(.plain)
+                .font(PMTypography.paperCallout)
                 .lineLimit(axis == .vertical ? 1...3 : 1...1)
         }
     }
@@ -572,7 +620,7 @@ private struct PaperEditorView: View {
                             Text(attachment.displayName)
                                 .lineLimit(1)
                             Text(attachment.filePath)
-                                .font(.caption)
+                                .font(PMTypography.captionRegular)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -607,13 +655,20 @@ private struct PaperEditorView: View {
             }
             .disabled(paper.primaryPDF == nil)
 
+            Button {
+                exportAnnotations()
+            } label: {
+                Label("导出所有标注", systemImage: "square.and.arrow.up")
+            }
+            .disabled(paper.annotations.isEmpty)
+
             if paper.annotations.isEmpty {
                 Text("从已关联 PDF 中提取高亮、批注和形状标注。")
                     .foregroundStyle(.secondary)
             } else {
                 if paper.annotations.count > 80 {
                     Text("为保持 Inspector 流畅，当前仅显示前 80 条标注。导出时仍会包含全部标注。")
-                        .font(.caption)
+                        .font(PMTypography.captionRegular)
                         .foregroundStyle(.secondary)
                 }
 
@@ -642,6 +697,9 @@ private struct PaperEditorView: View {
                             Text(annotation.note)
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
+                        }
+                        if let imageFilePath = annotation.imageFilePath {
+                            AnnotationImagePreview(path: imageFilePath)
                         }
                     }
                 }
@@ -716,7 +774,7 @@ private struct PaperEditorView: View {
                 if showExportPreview {
                     ScrollView(.horizontal) {
                         Text(TemplateRenderer.renderMetadata(paper: paper, snapshot: store.snapshot, includeAnnotations: false))
-                            .font(.system(.caption, design: .monospaced))
+                            .font(PMTypography.monospacedCaption)
                             .textSelection(.enabled)
                     }
                 }
@@ -775,15 +833,25 @@ private struct PaperEditorView: View {
 
     private func refreshAnnotations() {
         guard let pdf = paper.primaryPDF else { return }
-        do {
-            paper.annotations = try pdf.withResolvedURL { url in
-                guard let document = PDFDocument(url: url) else {
-                    throw PaperManagerError.message("PDFKit 无法读取这个 PDF。")
-                }
-                return PDFMetadataExtractor.extractAnnotations(from: document)
+        Task {
+            do {
+                paper.annotations = try await ImportService.extractAnnotations(from: pdf, paperID: paper.id)
+                store.statusMessage = "标注已刷新。"
+            } catch {
+                store.statusMessage = "标注提取失败：\(error.localizedDescription)"
             }
+        }
+    }
+
+    private func exportAnnotations() {
+        let name = "\(paper.citekey.nilIfBlank ?? paper.displayTitle.sanitizedFileName())-annotations.md"
+        guard let url = DialogService.saveURL(title: "导出标注", name: name, types: [.plainText]) else { return }
+        do {
+            let text = TemplateRenderer.renderAnnotations(paper.annotations, template: store.settings.annotationTemplate)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            store.statusMessage = "标注导出完成。"
         } catch {
-            store.statusMessage = "标注提取失败：\(error.localizedDescription)"
+            store.statusMessage = "标注导出失败：\(error.localizedDescription)"
         }
     }
 
@@ -887,7 +955,7 @@ private struct InspectorSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
+                .font(PMTypography.sectionHeader)
                 .foregroundStyle(.secondary)
             VStack(spacing: 0) {
                 content
@@ -904,17 +972,17 @@ private struct InspectorValueRow<Content: View>: View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(title)
-                    .font(.callout.weight(.semibold))
+                    .font(PMTypography.callout)
                     .foregroundStyle(.secondary)
-                    .frame(width: 76, alignment: .leading)
+                    .frame(width: 70, alignment: .leading)
                 content
-                    .font(.callout.weight(.semibold))
+                    .font(PMTypography.callout)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
 
             Divider()
-                .padding(.leading, 88)
+                .padding(.leading, 82)
         }
     }
 }
@@ -945,7 +1013,7 @@ private struct ToggleChip: View {
                         .imageScale(.small)
                 }
             }
-            .font(.caption.weight(.semibold))
+            .font(PMTypography.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.quaternary, in: Capsule())
@@ -955,17 +1023,82 @@ private struct ToggleChip: View {
     }
 }
 
+private struct AnnotationInspectorRow: View {
+    let annotation: ResearchAnnotation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
+                Circle()
+                    .fill(Color(hex: annotation.colorHex))
+                    .frame(width: 7, height: 7)
+                Text(annotation.kind.displayTitle)
+                    .font(PMTypography.paperCallout)
+                Text("– Page \(annotation.pageLabel.nilIfBlank ?? String(annotation.page))")
+                    .font(PMTypography.paperCallout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    ExportService.copyToPasteboard(annotation.copyText)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+                .help("复制标注")
+            }
+
+            if !annotation.selectedText.trimmed.isEmpty {
+                Text(annotation.selectedText)
+                    .font(PMTypography.paperBody)
+                    .textSelection(.enabled)
+            }
+
+            if !annotation.note.trimmed.isEmpty {
+                Text(annotation.note)
+                    .font(PMTypography.paperBodyRegular)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            if let imageFilePath = annotation.imageFilePath {
+                AnnotationImagePreview(path: imageFilePath)
+            }
+        }
+        .padding(.vertical, 11)
+
+        Divider()
+    }
+}
+
 private struct PlainInspectorTextEditor: View {
     @Binding var text: String
     let minHeight: CGFloat
 
     var body: some View {
         TextEditor(text: $text)
-            .font(.callout.weight(.semibold))
+            .font(PMTypography.callout)
             .scrollContentBackground(.hidden)
             .frame(minHeight: minHeight)
             .padding(7)
             .background(Color(nsColor: .textBackgroundColor).opacity(0.35), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct AnnotationImagePreview: View {
+    let path: String
+
+    var body: some View {
+        if let image = NSImage(contentsOfFile: path) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 180)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(.separator, lineWidth: 1)
+                }
+        }
     }
 }
 
@@ -980,5 +1113,19 @@ private extension ResearchAnnotation {
         .map(\.trimmed)
         .filter { !$0.isEmpty }
         .joined(separator: "\n")
+    }
+}
+
+private extension AnnotationKind {
+    var displayTitle: String {
+        switch self {
+        case .highlight: return "Highlight"
+        case .underline: return "Underline"
+        case .strikeout: return "Strikeout"
+        case .note: return "Note"
+        case .freeText: return "Free Text"
+        case .square: return "Square"
+        case .circle: return "Circle"
+        }
     }
 }

@@ -6,6 +6,7 @@ struct SidebarView: View {
     @Binding var selectedFilter: LibraryFilter
     @Binding var searchText: String
     @Binding var includeSubcollections: Bool
+    let focusSearchToken: Int
 
     private var flattenedCollections: [FlattenedCollection] {
         flatten(parentID: nil, depth: 0)
@@ -13,23 +14,32 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            LatticeSidebarSearchField(text: $searchText)
+            LatticeSidebarSearchField(text: $searchText, focusToken: focusSearchToken)
                 .padding(.horizontal, 12)
-                .padding(.top, 14)
-                .padding(.bottom, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
                         SidebarSectionHeader(title: "文库")
                         libraryRow("全部文献", systemImage: "books.vertical", count: store.papers.count, filter: .all)
+                        libraryRow("最近添加", systemImage: "clock", count: recentAddedCount, filter: .recentlyAdded)
+                        libraryRow("最近打开", systemImage: "clock.arrow.circlepath", count: recentOpenedCount, filter: .recentlyOpened)
                         libraryRow("未归类", systemImage: "archivebox", count: store.papers.filter(\.collectionIDs.isEmpty).count, filter: .unfiled)
                         libraryRow("缺少标识符", systemImage: "magnifyingglass.circle", count: store.papers.filter { !$0.hasIdentifier }.count, filter: .missingIDs)
                         libraryRow("缺少 PDF", systemImage: "paperclip", count: store.papers.filter { !$0.hasPDF }.count, filter: .missingPDF)
                         libraryRow("无标签", systemImage: "tag", count: store.papers.filter(\.tagIDs.isEmpty).count, filter: .noTags)
                     }
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        SidebarSectionHeader(title: "评分")
+                        ForEach((0...5).reversed(), id: \.self) { rating in
+                            libraryRow(ratingTitle(rating), systemImage: rating == 0 ? "star.slash" : "star", count: ratingCount(rating), filter: .rating(rating))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
                         SidebarSectionHeader(title: "文集", action: {
                             store.addCollection(name: "新建文集")
                         })
@@ -43,7 +53,7 @@ struct SidebarView: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         SidebarSectionHeader(title: "标签", action: {
                             store.addTag(name: "新建标签")
                         })
@@ -59,13 +69,13 @@ struct SidebarView: View {
 
                     if let message = store.statusMessage {
                         Text(message)
-                            .font(.caption)
+                            .font(PMTypography.captionRegular)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 18)
+                            .padding(.horizontal, 16)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 18)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
@@ -147,10 +157,26 @@ struct SidebarView: View {
 
     private func emptySidebarText(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 15, weight: .semibold))
+            .font(PMTypography.caption)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 36)
-            .frame(height: 34, alignment: .leading)
+            .padding(.horizontal, 32)
+            .frame(height: 28, alignment: .leading)
+    }
+
+    private var recentAddedCount: Int {
+        store.papers.filter { Date().timeIntervalSince($0.dateAdded) <= 60 * 60 * 24 * 30 }.count
+    }
+
+    private var recentOpenedCount: Int {
+        store.papers.filter { $0.lastOpenedAt != nil }.count
+    }
+
+    private func ratingCount(_ rating: Int) -> Int {
+        store.papers.filter { $0.rating == rating }.count
+    }
+
+    private func ratingTitle(_ rating: Int) -> String {
+        rating == 0 ? "未评分" : "\(rating) 星"
     }
 
     private func flatten(parentID: UUID?, depth: Int) -> [FlattenedCollection] {
@@ -236,7 +262,7 @@ private struct SidebarSectionHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 15, weight: .bold))
+                .font(PMTypography.sectionHeader)
                 .foregroundStyle(.secondary)
             Spacer()
             if let action {
@@ -247,8 +273,8 @@ private struct SidebarSectionHeader: View {
                 .help("新建\(title)")
             }
         }
-        .padding(.horizontal, 18)
-        .frame(height: 24)
+        .padding(.horizontal, 14)
+        .frame(height: 22)
     }
 }
 
@@ -296,12 +322,12 @@ private struct SidebarNavigationRow<Leading: View>: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 leading
-                    .font(.system(size: 20, weight: .medium))
-                    .frame(width: 24)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 20)
                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary.opacity(0.86))
 
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(PMTypography.sidebarRow)
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
 
@@ -309,18 +335,18 @@ private struct SidebarNavigationRow<Leading: View>: View {
 
                 if let count {
                     Text("\(count)")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(PMTypography.sidebarCount)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
             }
-            .padding(.leading, 18 + CGFloat(depth * 14))
-            .padding(.trailing, 14)
-            .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .padding(.leading, 14 + CGFloat(depth * 12))
+            .padding(.trailing, 12)
+            .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .background {
                 if isSelected {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color(nsColor: .selectedContentBackgroundColor).opacity(0.24))
                 }
             }
@@ -332,15 +358,18 @@ private struct SidebarNavigationRow<Leading: View>: View {
 
 private struct LatticeSidebarSearchField: View {
     @Binding var text: String
+    let focusToken: Int
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
             TextField("搜索文献", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 18, weight: .semibold))
+                .font(PMTypography.body)
+                .focused($isFocused)
             if !text.isEmpty {
                 Button {
                     text = ""
@@ -351,8 +380,11 @@ private struct LatticeSidebarSearchField: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 38)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .onChange(of: focusToken) { _, _ in
+            isFocused = true
+        }
     }
 }

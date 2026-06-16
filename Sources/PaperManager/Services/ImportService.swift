@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 
 struct ImportSummary {
     var imported = 0
@@ -76,12 +77,30 @@ enum ImportService {
         var paper = await Task.detached(priority: .userInitiated) {
             PDFMetadataExtractor.extract(from: url)
         }.value
-        if let metadata = try? await enrichIfPossible(paper: paper) {
+        if store.settings.autoExtractMetadataAfterImport, let metadata = try? await enrichIfPossible(paper: paper) {
             paper = metadata
         }
         paper.attachments = []
         let id = store.addOrReplacePaper(paper, targetFilter: targetFilter)
         try store.attachFile(url, to: id, kind: .pdf)
+        if store.settings.autoExtractAnnotationsAfterImport,
+           let attachment = store.paper(with: id)?.primaryPDF {
+            let annotations = try await extractAnnotations(from: attachment, paperID: id)
+            store.updateAnnotations(annotations, for: id)
+        }
+    }
+
+    static func extractAnnotations(from attachment: Attachment, paperID: UUID) async throws -> [ResearchAnnotation] {
+        try await Task.detached(priority: .userInitiated) {
+            try attachment.withResolvedURL { url in
+                guard let document = PDFDocument(url: url) else {
+                    throw PaperManagerError.message("PDFKit 无法读取这个 PDF。请确认文件没有损坏，且 PaperManager 仍有访问权限。")
+                }
+                let imageDirectory = try PDFMetadataExtractor.defaultAnnotationImageDirectory()
+                    .appendingPathComponent(paperID.uuidString, isDirectory: true)
+                return PDFMetadataExtractor.extractAnnotations(from: document, imageDirectory: imageDirectory, paperID: paperID)
+            }
+        }.value
     }
 
     private static func enrichIfPossible(paper: Paper) async throws -> Paper {

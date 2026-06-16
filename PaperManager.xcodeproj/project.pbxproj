@@ -31,6 +31,7 @@
 		AB0000000000000000000016 /* ViewUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000016 /* ViewUtilities.swift */; };
 		AB0000000000000000000017 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000017 /* PrivacyInfo.xcprivacy */; };
 		AB0000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001A /* Assets.xcassets */; };
+		AB0000000000000000000019 /* QuickLookService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001B /* QuickLookService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		AF0000000000000000000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AF0000000000000000000019 /* PaperManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaperManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF000000000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AF000000000000000000001B /* QuickLookService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -113,6 +115,7 @@
 				AF000000000000000000000A /* LibraryStore.swift */,
 				AF000000000000000000000B /* LocalAPIServer.swift */,
 				AF000000000000000000000C /* PDFMetadataExtractor.swift */,
+				AF000000000000000000001B /* QuickLookService.swift */,
 				AF000000000000000000000D /* RISParser.swift */,
 				AF000000000000000000000E /* TemplateRenderer.swift */,
 				AF000000000000000000000F /* Utilities.swift */,
@@ -232,6 +235,7 @@
 				AB000000000000000000000A /* LibraryStore.swift in Sources */,
 				AB000000000000000000000B /* LocalAPIServer.swift in Sources */,
 				AB000000000000000000000C /* PDFMetadataExtractor.swift in Sources */,
+				AB0000000000000000000019 /* QuickLookService.swift in Sources */,
 				AB000000000000000000000D /* RISParser.swift in Sources */,
 				AB000000000000000000000E /* TemplateRenderer.swift in Sources */,
 				AB000000000000000000000F /* Utilities.swift in Sources */,

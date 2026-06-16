@@ -12,20 +12,26 @@ struct SettingsView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 18) {
-                Text("PaperManager 设置")
-                    .font(.system(size: 28, weight: .bold))
-                    .padding(.top, 28)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 0) {
+                    Text("PaperManager")
+                        .font(PMTypography.latinFont(size: 22, weight: .bold))
+                    Text(" 设置")
+                        .font(PMTypography.largeTitle)
+                }
+                    .padding(.top, 24)
 
                 selectedContent
+                    .font(PMTypography.body)
                     .formStyle(.grouped)
                     .scrollContentBackground(.hidden)
             }
-            .padding(.horizontal, 30)
-            .padding(.bottom, 26)
+            .padding(.horizontal, 26)
+            .padding(.bottom, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .font(PMTypography.body)
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
     }
 
@@ -33,16 +39,16 @@ struct SettingsView: View {
         List(selection: $selectedPane) {
             ForEach(SettingsPane.allCases) { pane in
                 Label(pane.title, systemImage: pane.systemImage)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(PMTypography.sidebarRow)
                     .tag(pane)
             }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .top) {
-            Color.clear.frame(height: 52)
+            Color.clear.frame(height: 46)
         }
-        .frame(width: 224)
+        .frame(width: 204)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
@@ -76,6 +82,14 @@ struct SettingsView: View {
                         Text(choice.label).tag(choice)
                     }
                 }
+
+                Picker("表格密度", selection: binding(\.tableDensity)) {
+                    ForEach(TableDensity.allCases) { density in
+                        Text(density.label).tag(density)
+                    }
+                }
+
+                Toggle("默认显示检查器", isOn: binding(\.showInspectorByDefault))
             }
 
             Section("阅读器") {
@@ -128,10 +142,17 @@ struct SettingsView: View {
 
                 Toggle("移除文献时，将关联文件移到废纸篓", isOn: binding(\.deleteAttachmentsToTrash))
                 Toggle("自动重命名 PDF", isOn: binding(\.autoRenamePDFs))
+                Toggle("移动或复制 PDF 前确认", isOn: binding(\.confirmBeforeMovingFiles))
                 TextField("格式", text: binding(\.pdfRenameTemplate))
-                    .font(.system(.body, design: .monospaced))
+                    .font(PMTypography.monospacedBody)
                 Text("示例：1905 - Einstein - On the Electrodynamics of Moving Bodies.pdf")
                     .foregroundStyle(.secondary)
+            }
+
+            Section("自动处理") {
+                Toggle("导入后自动补全元数据", isOn: binding(\.autoExtractMetadataAfterImport))
+                Toggle("导入后自动提取标注", isOn: binding(\.autoExtractAnnotationsAfterImport))
+                Toggle("打开 PDF 后自动刷新标注", isOn: binding(\.autoExtractAnnotationsAfterOpeningPDF))
             }
         }
     }
@@ -140,11 +161,11 @@ struct SettingsView: View {
         Form {
             Section("Citekey") {
                 TextField("格式", text: binding(\.citekeyFormat))
-                    .font(.system(.body, design: .monospaced))
+                    .font(PMTypography.monospacedBody)
 
                 LabeledContent("预览") {
                     Text(CitekeyGenerator.render(format: store.settings.citekeyFormat, paper: samplePaper))
-                        .font(.system(.body, design: .monospaced))
+                        .font(PMTypography.monospacedBody)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -171,7 +192,7 @@ struct SettingsView: View {
                 }
 
                 TextEditor(text: binding(\.metadataTemplate))
-                    .font(.system(.body, design: .monospaced))
+                    .font(PMTypography.monospacedBody)
                     .frame(minHeight: 240)
             }
 
@@ -183,8 +204,18 @@ struct SettingsView: View {
                 }
 
                 TextEditor(text: binding(\.annotationTemplate))
-                    .font(.system(.body, design: .monospaced))
+                    .font(PMTypography.monospacedBody)
                     .frame(minHeight: 120)
+            }
+
+            Section("预览") {
+                ScrollView {
+                    Text(TemplateRenderer.renderMetadata(paper: samplePaperForTemplate, snapshot: previewSnapshot))
+                        .font(PMTypography.monospacedBody)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 180)
             }
         }
     }
@@ -290,6 +321,22 @@ struct SettingsView: View {
         paper.journal = "NeurIPS"
         paper.doi = "10.48550/arXiv.1706.03762"
         return paper
+    }
+
+    private var samplePaperForTemplate: Paper {
+        var paper = samplePaper
+        paper.abstract = "A compact sample abstract for previewing metadata templates."
+        paper.notes = "Reader notes appear here."
+        paper.annotations = [
+            ResearchAnnotation(page: 3, kind: .highlight, selectedText: "Scaled dot-product attention is efficient.", note: "Key method.")
+        ]
+        return paper
+    }
+
+    private var previewSnapshot: LibrarySnapshot {
+        var snapshot = store.snapshot
+        snapshot.settings = store.settings
+        return snapshot
     }
 
     private func createBackup() {

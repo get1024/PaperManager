@@ -14,9 +14,16 @@ struct ContentView: View {
     @State private var showDOIAdd = false
     @State private var includeSubcollections = true
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var sortDescriptor = PaperSortDescriptor.defaultValue
+    @State private var focusSearchToken = 0
 
     private var visiblePapers: [Paper] {
-        store.filteredPapers(for: selectedFilter, searchText: searchText, includeSubcollections: includeSubcollections)
+        store.filteredPapers(
+            for: selectedFilter,
+            searchText: searchText,
+            includeSubcollections: includeSubcollections,
+            sortDescriptor: sortDescriptor
+        )
     }
 
     private var targetPapers: [Paper] {
@@ -40,9 +47,10 @@ struct ContentView: View {
             SidebarView(
                 selectedFilter: $selectedFilter,
                 searchText: $searchText,
-                includeSubcollections: $includeSubcollections
+                includeSubcollections: $includeSubcollections,
+                focusSearchToken: focusSearchToken
             )
-            .navigationSplitViewColumnWidth(min: 220, ideal: 252, max: 292)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 226, max: 260)
         } content: {
             PaperListView(
                 title: selectedTitle,
@@ -52,13 +60,15 @@ struct ContentView: View {
                 onOpenSelected: openSelectedPDF,
                 onRevealSelected: revealSelectedPDF,
                 onDeleteSelected: deleteSelectedPapers,
-                onImportURLs: importURLs
+                onImportURLs: importURLs,
+                density: store.settings.tableDensity
             )
             .navigationTitle(selectedTitle)
         } detail: {
             PaperDetailView(selection: $selectedPaperIDs)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 360, max: 430)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 400)
         }
+        .font(PMTypography.bodyRegular)
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -66,6 +76,9 @@ struct ContentView: View {
                     Button("导入文件...") { showImporter = true }
                     Button("通过标识符添加...") { showDOIAdd = true }
                     Button("手动添加...") { showManualAdd = true }
+                    Divider()
+                    Button("刷新元数据") { refreshMetadataForTargets() }
+                        .disabled(targetPapers.isEmpty || store.isBusy)
                 } label: {
                     Label("添加", systemImage: "plus")
                 }
@@ -80,6 +93,27 @@ struct ContentView: View {
                     Button("复制 RIS") { ExportService.copyToPasteboard(ExportService.ris(for: targetPapers)) }
                 } label: {
                     Label("导出", systemImage: "square.and.arrow.up")
+                }
+                .labelStyle(.iconOnly)
+
+                Menu {
+                    ForEach(PaperSortField.allCases) { field in
+                        Button {
+                            if sortDescriptor.field == field {
+                                sortDescriptor.ascending.toggle()
+                            } else {
+                                sortDescriptor = PaperSortDescriptor(field: field, ascending: defaultAscending(for: field))
+                            }
+                        } label: {
+                            if sortDescriptor.field == field {
+                                Label(field.label, systemImage: sortDescriptor.ascending ? "arrow.up" : "arrow.down")
+                            } else {
+                                Text(field.label)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("排序", systemImage: "arrow.up.arrow.down")
                 }
                 .labelStyle(.iconOnly)
 
@@ -111,12 +145,14 @@ struct ContentView: View {
         }
         .onAppear {
             localAPI.reconfigure(with: store)
+            columnVisibility = store.settings.showInspectorByDefault ? .all : .doubleColumn
         }
         .onChange(of: selectedFilter) { _, _ in
             selectedPaperIDs.removeAll()
         }
         .onChange(of: store.settings) { _, _ in
             localAPI.reconfigure(with: store)
+            columnVisibility = store.settings.showInspectorByDefault ? .all : .doubleColumn
         }
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerImportRequested)) { _ in
             showImporter = true
@@ -133,11 +169,17 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerOpenSelectedRequested)) { _ in
             openSelectedPDF()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .paperManagerQuickLookRequested)) { _ in
+            quickLookSelectedPDF()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerRevealSelectedRequested)) { _ in
             revealSelectedPDF()
         }
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerDeleteSelectedRequested)) { _ in
             deleteSelectedPapers()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .paperManagerFocusSearchRequested)) { _ in
+            focusSearchToken += 1
         }
     }
 
@@ -170,9 +212,33 @@ struct ContentView: View {
                 } else {
                     NSWorkspace.shared.open(url)
                 }
+                store.markOpened(paper.id)
+                if store.settings.autoExtractAnnotationsAfterOpeningPDF {
+                    refreshAnnotations(for: paper.id, attachment: attachment)
+                }
             }
         } catch {
             store.statusMessage = "无法打开 PDF：\(error.localizedDescription)"
+        }
+    }
+
+    private func quickLookSelectedPDF() {
+        guard let paper = selectedPapers.first else { return }
+        guard let attachment = paper.primaryPDF else {
+            store.statusMessage = "这篇文献尚未关联 PDF，无法快速预览。"
+            return
+        }
+
+        do {
+            try attachment.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                }
+                QuickLookService.shared.preview(url: url)
+                store.markOpened(paper.id)
+            }
+        } catch {
+            store.statusMessage = "无法快速预览 PDF：\(error.localizedDescription)"
         }
     }
 
@@ -203,6 +269,54 @@ struct ContentView: View {
 
     private func importURLs(_ urls: [URL]) {
         Task { await ImportService.importURLs(urls, into: store, targetFilter: selectedFilter) }
+    }
+
+    private func refreshAnnotations(for paperID: UUID, attachment: Attachment) {
+        Task {
+            do {
+                let annotations = try await ImportService.extractAnnotations(from: attachment, paperID: paperID)
+                store.updateAnnotations(annotations, for: paperID)
+                store.statusMessage = "标注已刷新。"
+            } catch {
+                store.statusMessage = "标注提取失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func refreshMetadataForTargets() {
+        let papers = targetPapers
+        guard !papers.isEmpty else { return }
+        Task {
+            store.isBusy = true
+            defer { store.isBusy = false }
+            var updated = 0
+            var failed = 0
+            for (index, paper) in papers.enumerated() {
+                store.statusMessage = "正在刷新元数据 \(index + 1)/\(papers.count)：\(paper.displayTitle)"
+                do {
+                    let metadata = try await MetadataLookupClient.lookup(
+                        doi: paper.doi.nilIfBlank,
+                        arxivID: paper.arxivLookupID,
+                        isbn: paper.isbn.nilIfBlank,
+                        title: paper.title.nilIfBlank
+                    )
+                    store.updatePaper(metadata.merged(into: paper, replaceExisting: false))
+                    updated += 1
+                } catch {
+                    failed += 1
+                }
+            }
+            store.statusMessage = "元数据刷新完成：\(updated) 篇更新，\(failed) 篇失败。"
+        }
+    }
+
+    private func defaultAscending(for field: PaperSortField) -> Bool {
+        switch field {
+        case .title, .authors, .source:
+            return true
+        case .year, .rating, .dateAdded, .lastOpened:
+            return false
+        }
     }
 
     private func exportBibTeX() {

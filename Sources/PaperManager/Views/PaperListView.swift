@@ -10,6 +10,7 @@ struct PaperListView: View {
     var onRevealSelected: () -> Void
     var onDeleteSelected: () -> Void
     var onImportURLs: ([URL]) -> Void
+    var density: TableDensity = .compact
 
     var body: some View {
         Group {
@@ -67,6 +68,8 @@ struct PaperListView: View {
                     }
                     .width(min: 140, ideal: 220)
                 }
+                .font(PMTypography.paperBodyRegular)
+                .environment(\.defaultMinListRowHeight, density == .compact ? 30 : 40)
                 .contextMenu {
                     Button("打开 PDF") { onOpenSelected() }
                         .disabled(selection.isEmpty)
@@ -92,7 +95,7 @@ struct PaperListView: View {
             }
             Spacer()
         }
-        .font(.caption)
+        .font(PMTypography.captionRegular)
         .foregroundStyle(.secondary)
         .padding(.horizontal)
         .padding(.vertical, 5)
@@ -158,7 +161,7 @@ private struct PaperTitleCell: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
             Text(paper.displayTitle)
-                .fontWeight(.semibold)
+                .font(PMTypography.paperBody)
                 .lineLimit(1)
         }
     }

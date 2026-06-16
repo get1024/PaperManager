@@ -1,10 +1,19 @@
 import Foundation
 
 enum TemplateRenderer {
-    static func renderMetadata(paper: Paper, snapshot: LibrarySnapshot, includeAnnotations: Bool = true) -> String {
+    static func renderMetadata(
+        paper: Paper,
+        snapshot: LibrarySnapshot,
+        includeAnnotations: Bool = true,
+        annotationImagePath: (ResearchAnnotation) -> String = { $0.imageFilePath ?? "" }
+    ) -> String {
         var context = context(for: paper, snapshot: snapshot)
         if includeAnnotations {
-            context["annotations"] = renderAnnotations(paper.annotations, template: snapshot.settings.annotationTemplate)
+            context["annotations"] = renderAnnotations(
+                paper.annotations,
+                template: snapshot.settings.annotationTemplate,
+                imagePath: annotationImagePath
+            )
         } else {
             context["annotations"] = ""
         }
@@ -13,7 +22,11 @@ enum TemplateRenderer {
             .trimmed
     }
 
-    static func renderAnnotations(_ annotations: [ResearchAnnotation], template: String) -> String {
+    static func renderAnnotations(
+        _ annotations: [ResearchAnnotation],
+        template: String,
+        imagePath: (ResearchAnnotation) -> String = { $0.imageFilePath ?? "" }
+    ) -> String {
         annotations.map { annotation in
             let context: [String: String] = [
                 "page": String(annotation.page),
@@ -21,7 +34,8 @@ enum TemplateRenderer {
                 "type": annotation.kind.rawValue,
                 "color": annotation.colorHex,
                 "selectedText": annotation.selectedText,
-                "note": annotation.note
+                "note": annotation.note,
+                "image": imagePath(annotation)
             ]
             return render(template: template, context: context).trimmed
         }

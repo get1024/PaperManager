@@ -80,24 +80,104 @@ enum PDFMetadataExtractor {
         return nil
     }
 
-    static func extractAnnotations(from document: PDFDocument) -> [ResearchAnnotation] {
+    static func extractAnnotations(
+        from document: PDFDocument,
+        imageDirectory: URL? = nil,
+        paperID: UUID? = nil
+    ) -> [ResearchAnnotation] {
         var annotations: [ResearchAnnotation] = []
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             for pdfAnnotation in page.annotations {
                 let kind = AnnotationKind(pdfType: pdfAnnotation.type)
+                let selectedText = selectedText(for: pdfAnnotation, on: page)
+                let imagePath: String?
+                if kind.needsImage {
+                    imagePath = renderAnnotationImage(
+                        annotation: pdfAnnotation,
+                        page: page,
+                        pageIndex: pageIndex,
+                        imageDirectory: imageDirectory,
+                        paperID: paperID
+                    )?.path
+                } else {
+                    imagePath = nil
+                }
                 let annotation = ResearchAnnotation(
                     page: pageIndex + 1,
                     pageLabel: page.label ?? "",
                     kind: kind,
                     colorHex: pdfAnnotation.color.hexString,
-                    selectedText: "",
-                    note: pdfAnnotation.contents ?? ""
+                    selectedText: selectedText,
+                    note: pdfAnnotation.contents ?? "",
+                    bounds: CGRectCodable(pdfAnnotation.bounds),
+                    imageFilePath: imagePath,
+                    createdAt: pdfAnnotation.modificationDate
                 )
                 annotations.append(annotation)
             }
         }
         return annotations
+    }
+
+    static func defaultAnnotationImageDirectory() throws -> URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("PaperManager", isDirectory: true)
+            .appendingPathComponent("AnnotationImages", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private static func selectedText(for annotation: PDFAnnotation, on page: PDFPage) -> String {
+        guard let selection = page.selection(for: annotation.bounds) else { return "" }
+        return selection.string?.trimmed ?? ""
+    }
+
+    private static func renderAnnotationImage(
+        annotation: PDFAnnotation,
+        page: PDFPage,
+        pageIndex: Int,
+        imageDirectory: URL?,
+        paperID: UUID?
+    ) -> URL? {
+        guard let imageDirectory else { return nil }
+        try? FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true)
+
+        let pageBounds = page.bounds(for: .cropBox)
+        let padded = annotation.bounds.insetBy(dx: -18, dy: -18).intersection(pageBounds)
+        guard padded.width > 4, padded.height > 4 else { return nil }
+
+        let scale: CGFloat = 2
+        let imageSize = CGSize(width: padded.width * scale, height: padded.height * scale)
+        let image = NSImage(size: imageSize)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        guard let context = NSGraphicsContext.current?.cgContext else { return nil }
+        NSColor.textBackgroundColor.setFill()
+        NSBezierPath(rect: CGRect(origin: .zero, size: imageSize)).fill()
+
+        context.saveGState()
+        context.scaleBy(x: scale, y: scale)
+        context.translateBy(x: -padded.minX, y: -padded.minY)
+        page.draw(with: .cropBox, to: context)
+        context.restoreGState()
+
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let data = bitmap.representation(using: .png, properties: [:]) else {
+            return nil
+        }
+
+        let owner = paperID?.uuidString ?? "unknown"
+        let filename = "\(owner)-p\(pageIndex + 1)-\(annotation.bounds.integral.hashValue.magnitude).png"
+        let url = imageDirectory.appendingPathComponent(filename)
+        do {
+            try data.write(to: url, options: [.atomic])
+            return url
+        } catch {
+            return nil
+        }
     }
 }
 
@@ -112,6 +192,17 @@ private extension AnnotationKind {
         case "square": self = .square
         case "circle": self = .circle
         default: self = .note
+        }
+    }
+}
+
+private extension AnnotationKind {
+    var needsImage: Bool {
+        switch self {
+        case .square, .circle:
+            return true
+        case .highlight, .underline, .strikeout, .note, .freeText:
+            return false
         }
     }
 }

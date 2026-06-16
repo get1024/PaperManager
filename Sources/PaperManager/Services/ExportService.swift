@@ -27,8 +27,14 @@ enum ExportService {
 
     static func writeDetailedMarkdown(_ papers: [Paper], snapshot: LibrarySnapshot, to folder: URL) throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        for item in detailedMarkdown(for: papers, snapshot: snapshot) {
-            try item.text.write(to: folder.appendingPathComponent(item.filename), atomically: true, encoding: .utf8)
+        for paper in papers {
+            if paper.annotations.contains(where: { $0.imageFilePath?.nilIfBlank != nil }) {
+                try writeTextBundle(paper: paper, snapshot: snapshot, to: folder)
+            } else {
+                let filename = (paper.citekey.nilIfBlank ?? paper.displayTitle).sanitizedFileName() + ".md"
+                let text = TemplateRenderer.renderMetadata(paper: paper, snapshot: snapshot)
+                try text.write(to: uniqueFileURL(folder.appendingPathComponent(filename)), atomically: true, encoding: .utf8)
+            }
         }
     }
 
@@ -155,5 +161,64 @@ enum ExportService {
             return (parts.first?.trimmed ?? "", parts.dropFirst().joined(separator: separator).trimmed)
         }
         return (pages.trimmed, "")
+    }
+
+    private static func writeTextBundle(paper: Paper, snapshot: LibrarySnapshot, to folder: URL) throws {
+        let baseName = (paper.citekey.nilIfBlank ?? paper.displayTitle).sanitizedFileName()
+        let bundleURL = uniqueDirectoryURL(folder.appendingPathComponent(baseName).appendingPathExtension("textbundle"))
+        let assetsURL = bundleURL.appendingPathComponent("assets", isDirectory: true)
+        try FileManager.default.createDirectory(at: assetsURL, withIntermediateDirectories: true)
+
+        var relativeImagePaths: [UUID: String] = [:]
+        var imageIndex = 1
+        for annotation in paper.annotations {
+            guard let path = annotation.imageFilePath?.nilIfBlank else { continue }
+            let source = URL(fileURLWithPath: path)
+            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            let ext = source.pathExtension.nilIfBlank ?? "png"
+            let destinationName = "annotation-\(imageIndex).\(ext)"
+            try FileManager.default.copyItem(at: source, to: assetsURL.appendingPathComponent(destinationName))
+            relativeImagePaths[annotation.id] = "assets/\(destinationName)"
+            imageIndex += 1
+        }
+
+        let text = TemplateRenderer.renderMetadata(
+            paper: paper,
+            snapshot: snapshot,
+            annotationImagePath: { annotation in
+                relativeImagePaths[annotation.id] ?? annotation.imageFilePath ?? ""
+            }
+        )
+        try text.write(to: bundleURL.appendingPathComponent("text.md"), atomically: true, encoding: .utf8)
+    }
+
+    private static func uniqueFileURL(_ url: URL) -> URL {
+        guard FileManager.default.fileExists(atPath: url.path) else { return url }
+        let folder = url.deletingLastPathComponent()
+        let base = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        var index = 2
+        while true {
+            let candidate = folder.appendingPathComponent("\(base) \(index)").appendingPathExtension(ext)
+            if !FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            index += 1
+        }
+    }
+
+    private static func uniqueDirectoryURL(_ url: URL) -> URL {
+        guard FileManager.default.fileExists(atPath: url.path) else { return url }
+        let folder = url.deletingLastPathComponent()
+        let base = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        var index = 2
+        while true {
+            let candidate = folder.appendingPathComponent("\(base) \(index)").appendingPathExtension(ext)
+            if !FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            index += 1
+        }
     }
 }

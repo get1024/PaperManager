@@ -47,9 +47,24 @@ enum PDFSubfolderGrouping: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum TableDensity: String, Codable, CaseIterable, Identifiable {
+    case compact
+    case comfortable
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .compact: return "紧凑"
+        case .comfortable: return "舒适"
+        }
+    }
+}
+
 struct AppSettings: Codable, Hashable {
     var appearance: AppearanceChoice = .system
     var languageIdentifier: String = "system"
+    var tableDensity: TableDensity = .compact
+    var showInspectorByDefault: Bool = true
 
     var deleteAttachmentsToTrash: Bool = false
     var defaultPDFReaderPath: String = ""
@@ -58,6 +73,10 @@ struct AppSettings: Codable, Hashable {
     var pdfSubfolderGrouping: PDFSubfolderGrouping = .none
     var autoRenamePDFs: Bool = false
     var pdfRenameTemplate: String = "{{citekey}}"
+    var confirmBeforeMovingFiles: Bool = true
+    var autoExtractMetadataAfterImport: Bool = true
+    var autoExtractAnnotationsAfterImport: Bool = false
+    var autoExtractAnnotationsAfterOpeningPDF: Bool = false
 
     var citekeyFormat: String = "{{authorLower}}{{year}}{{titleWord}}"
     var metadataTemplate: String = AppSettings.defaultMetadataTemplate
@@ -98,6 +117,13 @@ struct AppSettings: Codable, Hashable {
     """
 
     static let defaultAnnotationTemplate = """
-    - p. {{page}}{{#selectedText}}: {{selectedText}}{{/selectedText}}{{#note}} -- {{note}}{{/note}}
+    - Page {{page}} · {{type}}
+      {{#selectedText}}
+      > {{selectedText}}
+      {{/selectedText}}{{#note}}
+      Comment: {{note}}
+      {{/note}}{{#image}}
+      ![]({{image}})
+      {{/image}}
     """
 }

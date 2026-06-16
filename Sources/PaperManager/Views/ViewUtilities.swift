@@ -2,6 +2,35 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum PMTypography {
+    static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom("PingFang SC", size: size).weight(weight)
+    }
+
+    static func latinFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom("Times New Roman", size: size).weight(weight)
+    }
+
+    static let largeTitle = font(size: 22, weight: .bold)
+    static let title = font(size: 16, weight: .bold)
+    static let headline = font(size: 14, weight: .bold)
+    static let body = font(size: 13, weight: .semibold)
+    static let bodyRegular = font(size: 13)
+    static let callout = font(size: 12.5, weight: .semibold)
+    static let caption = font(size: 11.5, weight: .semibold)
+    static let captionRegular = font(size: 11.5)
+    static let sidebarRow = font(size: 14, weight: .semibold)
+    static let sidebarCount = font(size: 13, weight: .semibold)
+    static let sectionHeader = font(size: 12, weight: .bold)
+    static let paperTitle = latinFont(size: 16, weight: .bold)
+    static let paperBody = latinFont(size: 13, weight: .semibold)
+    static let paperBodyRegular = latinFont(size: 13)
+    static let paperCallout = latinFont(size: 12.5, weight: .semibold)
+    static let paperCaption = latinFont(size: 11.5, weight: .semibold)
+    static let monospacedBody = Font.system(size: 12.5, weight: .regular, design: .monospaced)
+    static let monospacedCaption = Font.system(size: 11.5, weight: .regular, design: .monospaced)
+}
+
 extension UTType {
     static let bibTeX = UTType(filenameExtension: "bib") ?? .plainText
     static let ris = UTType(filenameExtension: "ris") ?? .plainText

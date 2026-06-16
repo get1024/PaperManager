@@ -91,21 +91,32 @@ final class LibraryStore: ObservableObject {
         snapshot.papers.first { $0.id == id }
     }
 
-    func filteredPapers(for filter: LibraryFilter, searchText: String, includeSubcollections: Bool) -> [Paper] {
+    func filteredPapers(
+        for filter: LibraryFilter,
+        searchText: String,
+        includeSubcollections: Bool,
+        sortDescriptor: PaperSortDescriptor = .defaultValue
+    ) -> [Paper] {
         let query = searchText.trimmed.lowercased()
         let filtered = papers.filter { paper in
             let matchesFilter: Bool
             switch filter {
             case .all:
                 matchesFilter = true
+            case .recentlyAdded:
+                matchesFilter = Date().timeIntervalSince(paper.dateAdded) <= 60 * 60 * 24 * 30
+            case .recentlyOpened:
+                matchesFilter = paper.lastOpenedAt != nil
             case .unfiled:
                 matchesFilter = paper.collectionIDs.isEmpty
             case .missingPDF:
                 matchesFilter = !paper.hasPDF
             case .missingIDs:
-                matchesFilter = paper.doi.trimmed.isEmpty
+                matchesFilter = !paper.hasIdentifier
             case .noTags:
                 matchesFilter = paper.tagIDs.isEmpty
+            case .rating(let value):
+                matchesFilter = paper.rating == value
             case .collection(let id):
                 let ids = includeSubcollections ? snapshot.collections.descendantIDs(of: id) : [id]
                 matchesFilter = paper.collectionIDs.contains { ids.contains($0) }
@@ -115,6 +126,12 @@ final class LibraryStore: ObservableObject {
 
             guard matchesFilter else { return false }
             guard !query.isEmpty else { return true }
+            let collectionText = paper.collectionIDs
+                .map { snapshot.collections.path(for: $0) }
+                .joined(separator: " ")
+            let tagText = paper.tagIDs
+                .compactMap { id in snapshot.tags.first(where: { $0.id == id })?.name }
+                .joined(separator: " ")
             return [
                 paper.title,
                 paper.subtitle ?? "",
@@ -127,11 +144,14 @@ final class LibraryStore: ObservableObject {
                 paper.isbn,
                 paper.eprint,
                 paper.citekey,
+                paper.abstract,
                 paper.notes,
+                collectionText,
+                tagText,
                 paper.customFields.map { "\($0.key) \($0.value)" }.joined(separator: " ")
             ].joined(separator: " ").lowercased().contains(query)
         }
-        return filtered
+        return sort(filtered, by: sortDescriptor)
     }
 
     @discardableResult
@@ -175,6 +195,20 @@ final class LibraryStore: ObservableObject {
             normalizeCitekey(for: &updated)
         }
         snapshot.papers[index] = updated
+        save()
+    }
+
+    func markOpened(_ paperID: UUID) {
+        guard let index = snapshot.papers.firstIndex(where: { $0.id == paperID }) else { return }
+        snapshot.papers[index].lastOpenedAt = Date()
+        snapshot.papers[index].dateModified = Date()
+        save()
+    }
+
+    func updateAnnotations(_ annotations: [ResearchAnnotation], for paperID: UUID) {
+        guard let index = snapshot.papers.firstIndex(where: { $0.id == paperID }) else { return }
+        snapshot.papers[index].annotations = annotations
+        snapshot.papers[index].dateModified = Date()
         save()
     }
 
@@ -339,6 +373,51 @@ final class LibraryStore: ObservableObject {
         paper.citekey = CitekeyGenerator.generate(for: paper, format: snapshot.settings.citekeyFormat, existing: existing)
     }
 
+    private func sort(_ papers: [Paper], by descriptor: PaperSortDescriptor) -> [Paper] {
+        papers.sorted { lhs, rhs in
+            let comparison: ComparisonResult
+            switch descriptor.field {
+            case .title:
+                comparison = lhs.displayTitle.localizedStandardCompare(rhs.displayTitle)
+            case .authors:
+                comparison = lhs.authorsDisplay.localizedStandardCompare(rhs.authorsDisplay)
+            case .year:
+                comparison = compareOptional(lhs.year, rhs.year)
+            case .source:
+                comparison = lhs.sourceDisplay.localizedStandardCompare(rhs.sourceDisplay)
+            case .rating:
+                comparison = compareValues(lhs.rating, rhs.rating)
+            case .dateAdded:
+                comparison = compareValues(lhs.dateAdded, rhs.dateAdded)
+            case .lastOpened:
+                comparison = compareOptional(lhs.lastOpenedAt, rhs.lastOpenedAt)
+            }
+
+            if comparison == .orderedSame {
+                return lhs.displayTitle.localizedStandardCompare(rhs.displayTitle) == .orderedAscending
+            }
+            return descriptor.ascending ? comparison == .orderedAscending : comparison == .orderedDescending
+        }
+    }
+
+    private func compareValues<Value: Comparable>(_ lhs: Value, _ rhs: Value) -> ComparisonResult {
+        if lhs == rhs { return .orderedSame }
+        return lhs < rhs ? .orderedAscending : .orderedDescending
+    }
+
+    private func compareOptional<Value: Comparable>(_ lhs: Value?, _ rhs: Value?) -> ComparisonResult {
+        switch (lhs, rhs) {
+        case (.none, .none):
+            return .orderedSame
+        case (.none, .some):
+            return .orderedAscending
+        case (.some, .none):
+            return .orderedDescending
+        case (.some(let lhs), .some(let rhs)):
+            return compareValues(lhs, rhs)
+        }
+    }
+
     private func uniqueCollectionName(base: String, parentID: UUID?) -> String {
         uniqueName(base: base, existing: Set(snapshot.collections.filter { $0.parentID == parentID }.map(\.name)))
     }
@@ -396,6 +475,11 @@ final class LibraryStore: ObservableObject {
         }
 
         if destination.path == sourceURL.path { return sourceURL }
+        if settings.confirmBeforeMovingFiles {
+            guard confirmOrganizationOperation(mode: settings.pdfOrganizationMode, source: sourceURL, destination: destination) else {
+                throw PaperManagerError.message("已取消文件整理。PDF 仍保留在原位置，文献记录未修改附件路径。")
+            }
+        }
 
         switch settings.pdfOrganizationMode {
         case .copy:
@@ -406,5 +490,23 @@ final class LibraryStore: ObservableObject {
             break
         }
         return destination
+    }
+
+    private func confirmOrganizationOperation(mode: PDFOrganizationMode, source: URL, destination: URL) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        switch mode {
+        case .copy:
+            alert.messageText = "复制 PDF 到文库文件夹？"
+            alert.informativeText = "\(source.lastPathComponent)\n\n将复制到：\n\(destination.path)"
+        case .move:
+            alert.messageText = "移动 PDF 到文库文件夹？"
+            alert.informativeText = "\(source.lastPathComponent)\n\n将从原位置移动到：\n\(destination.path)"
+        case .none:
+            return true
+        }
+        alert.addButton(withTitle: "继续")
+        alert.addButton(withTitle: "取消")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }

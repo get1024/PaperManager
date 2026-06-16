@@ -31,7 +31,7 @@ struct PaperManagerCommands: Commands {
             Button("导入文件...") {
                 NotificationCenter.default.post(name: .paperManagerImportRequested, object: nil)
             }
-            .keyboardShortcut("i", modifiers: [.command])
+            .keyboardShortcut("o", modifiers: [.command])
 
             Button("通过标识符添加...") {
                 NotificationCenter.default.post(name: .paperManagerDOIRequested, object: nil)
@@ -44,10 +44,22 @@ struct PaperManagerCommands: Commands {
         }
 
         CommandMenu("文库") {
+            Button("搜索文献") {
+                NotificationCenter.default.post(name: .paperManagerFocusSearchRequested, object: nil)
+            }
+            .keyboardShortcut("f", modifiers: [.command])
+
+            Divider()
+
             Button("打开选中 PDF") {
                 NotificationCenter.default.post(name: .paperManagerOpenSelectedRequested, object: nil)
             }
             .keyboardShortcut(.return, modifiers: [])
+
+            Button("快速预览") {
+                NotificationCenter.default.post(name: .paperManagerQuickLookRequested, object: nil)
+            }
+            .keyboardShortcut(.space, modifiers: [])
 
             Button("在 Finder 中显示") {
                 NotificationCenter.default.post(name: .paperManagerRevealSelectedRequested, object: nil)
@@ -74,6 +86,8 @@ extension Notification.Name {
     static let paperManagerManualAddRequested = Notification.Name("PaperManagerManualAddRequested")
     static let paperManagerExportBibTeXRequested = Notification.Name("PaperManagerExportBibTeXRequested")
     static let paperManagerOpenSelectedRequested = Notification.Name("PaperManagerOpenSelectedRequested")
+    static let paperManagerQuickLookRequested = Notification.Name("PaperManagerQuickLookRequested")
     static let paperManagerRevealSelectedRequested = Notification.Name("PaperManagerRevealSelectedRequested")
     static let paperManagerDeleteSelectedRequested = Notification.Name("PaperManagerDeleteSelectedRequested")
+    static let paperManagerFocusSearchRequested = Notification.Name("PaperManagerFocusSearchRequested")
 }
