@@ -1,0 +1,323 @@
+{
+    "actions": {
+        "ExportPaperMetadataIntent": {
+            "assistantDefinedSchemaTraits": [],
+            "assistantDefinedSchemas": [],
+            "authenticationPolicy": 0,
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "descriptionMetadata": {
+                "descriptionText": {
+                    "alternatives": [],
+                    "key": "Pick a paper from Lattice and output metadata text using the default template"
+                },
+                "searchKeywords": []
+            },
+            "effectiveBundleIdentifiers": [],
+            "fullyQualifiedTypeName": "Lattice.ExportPaperMetadataIntent",
+            "identifier": "ExportPaperMetadataIntent",
+            "isAuthPolExplicit": false,
+            "isDiscoverable": true,
+            "mangledTypeName": "7Lattice25ExportPaperMetadataIntentV",
+            "mangledTypeNameByBundleIdentifier": {},
+            "mangledTypeNameByBundleIdentifierV2": {},
+            "mangledTypeNameV2": "7Lattice25ExportPaperMetadataIntentV",
+            "openAppWhenRun": false,
+            "outputFlags": 4,
+            "outputType": {
+                "primitive": {
+                    "wrapper": {
+                        "typeIdentifier": 0
+                    }
+                }
+            },
+            "parameters": [
+                {
+                    "capabilities": 1,
+                    "dynamicOptionsSupport": 0,
+                    "inputConnectionBehavior": 0,
+                    "isInput": false,
+                    "isOptional": false,
+                    "name": "output",
+                    "resolvableInputTypes": [],
+                    "title": {
+                        "alternatives": [],
+                        "key": "Output"
+                    },
+                    "typeSpecificMetadata": [
+                        "LNValueTypeSpecificMetadataKeyDefaultValue",
+                        {
+                            "string": {
+                                "wrapper": "copyToClipboard"
+                            }
+                        }
+                    ],
+                    "valueType": {
+                        "linkEnumeration": {
+                            "wrapper": {
+                                "identifier": "MetadataOutputMode"
+                            }
+                        }
+                    }
+                },
+                {
+                    "capabilities": 1,
+                    "dynamicOptionsSupport": 0,
+                    "inputConnectionBehavior": 0,
+                    "isInput": false,
+                    "isOptional": false,
+                    "name": "includeAnnotations",
+                    "resolvableInputTypes": [
+                        {
+                            "kindValue": 0,
+                            "valueType": {
+                                "primitive": {
+                                    "wrapper": {
+                                        "typeIdentifier": 1
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "title": {
+                        "alternatives": [],
+                        "key": "Include Annotations"
+                    },
+                    "typeSpecificMetadata": [
+                        "LNValueTypeSpecificMetadataKeyDefaultValue",
+                        {
+                            "int": {
+                                "wrapper": 0
+                            }
+                        }
+                    ],
+                    "valueType": {
+                        "primitive": {
+                            "wrapper": {
+                                "typeIdentifier": 1
+                            }
+                        }
+                    }
+                }
+            ],
+            "presentationStyle": 0,
+            "requiredCapabilities": [],
+            "supportedModes": 1,
+            "systemProtocolMetadata": [],
+            "systemProtocolMetadataV2": [],
+            "systemProtocols": [],
+            "title": {
+                "alternatives": [],
+                "key": "Export Paper Metadata"
+            },
+            "typeSpecificMetadata": [],
+            "visibilityMetadata": {
+                "assistantOnly": false,
+                "isDiscoverable": true
+            }
+        }
+    },
+    "assistantEntities": [],
+    "assistantIntentNegativePhrases": [],
+    "assistantIntents": [],
+    "autoShortcutProviderMangledName": "7Lattice0A9ShortcutsV",
+    "autoShortcuts": [
+        {
+            "actionIdentifier": "ExportPaperMetadataIntent",
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "phraseTemplates": [
+                {
+                    "alternatives": [],
+                    "key": "Export paper from ${applicationName}"
+                },
+                {
+                    "alternatives": [],
+                    "key": "Export paper metadata from ${applicationName}"
+                }
+            ],
+            "shortTitle": {
+                "alternatives": [],
+                "key": "Export Paper"
+            },
+            "systemImageName": "doc.text"
+        }
+    ],
+    "entities": {
+        "PaperEntity": {
+            "assistantDefinedSchemas": [],
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "defaultQueryIdentifier": "Lattice.PaperEntityQuery",
+            "displayTypeName": {
+                "alternatives": [],
+                "key": "Paper"
+            },
+            "effectiveBundleIdentifiers": [],
+            "fullyQualifiedTypeName": "Lattice.PaperEntity",
+            "mangledTypeName": "7Lattice11PaperEntityV",
+            "mangledTypeNameByBundleIdentifier": {},
+            "properties": [],
+            "requiredCapabilities": [],
+            "systemProtocolMetadata": [],
+            "systemProtocolMetadataV2": [],
+            "transient": false,
+            "typeName": "PaperEntity",
+            "visibilityMetadata": {
+                "assistantOnly": false,
+                "isDiscoverable": true
+            }
+        },
+        "TemplateEntity": {
+            "assistantDefinedSchemas": [],
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "defaultQueryIdentifier": "Lattice.TemplateEntityQuery",
+            "displayTypeName": {
+                "alternatives": [],
+                "key": "Template"
+            },
+            "effectiveBundleIdentifiers": [],
+            "fullyQualifiedTypeName": "Lattice.TemplateEntity",
+            "mangledTypeName": "7Lattice14TemplateEntityV",
+            "mangledTypeNameByBundleIdentifier": {},
+            "properties": [],
+            "requiredCapabilities": [],
+            "systemProtocolMetadata": [],
+            "systemProtocolMetadataV2": [],
+            "transient": false,
+            "typeName": "TemplateEntity",
+            "visibilityMetadata": {
+                "assistantOnly": false,
+                "isDiscoverable": true
+            }
+        }
+    },
+    "enums": [
+        {
+            "assistantDefinedSchemas": [],
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "cases": [
+                {
+                    "displayRepresentation": {
+                        "title": {
+                            "alternatives": [],
+                            "key": "Return Text"
+                        }
+                    },
+                    "identifier": "returnText"
+                },
+                {
+                    "displayRepresentation": {
+                        "title": {
+                            "alternatives": [],
+                            "key": "Copy to Clipboard"
+                        }
+                    },
+                    "identifier": "copyToClipboard"
+                }
+            ],
+            "displayTypeName": {
+                "alternatives": [],
+                "key": "Output"
+            },
+            "effectiveBundleIdentifiers": [],
+            "fullyQualifiedTypeName": "Lattice.MetadataOutputMode",
+            "identifier": "MetadataOutputMode",
+            "isSystem": false,
+            "mangledTypeName": "7Lattice18MetadataOutputModeO",
+            "mangledTypeNameByBundleIdentifier": {},
+            "numericFormatTypeName": {
+                "alternatives": [],
+                "key": "Output"
+            },
+            "visibilityMetadata": {
+                "assistantOnly": false,
+                "isDiscoverable": true
+            }
+        }
+    ],
+    "generator": {
+        "name": "xcode-tools",
+        "version": "17E202"
+    },
+    "negativePhrases": [],
+    "queries": {
+        "PaperEntityQuery": {
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "capabilities": 70,
+            "defaultQueryForEntity": true,
+            "effectiveBundleIdentifiers": [],
+            "entityType": "PaperEntity",
+            "fullyQualifiedIdentifier": "Lattice.PaperEntityQuery",
+            "identifier": "PaperEntityQuery",
+            "mangledTypeName": "7Lattice16PaperEntityQueryV",
+            "mangledTypeNameByBundleIdentifier": {},
+            "parameters": [],
+            "queryType": "PaperEntityQuery",
+            "resultValueType": {
+                "entity": {
+                    "wrapper": {
+                        "typeName": "PaperEntity"
+                    }
+                }
+            },
+            "sortingOptions": [],
+            "visibilityMetadata": {
+                "assistantOnly": false,
+                "isDiscoverable": true
+            }
+        },
+        "TemplateEntityQuery": {
+            "availabilityAnnotations": {
+                "LNPlatformNameWildcard": {
+                    "introducedVersion": "*"
+                }
+            },
+            "capabilities": 66,
+            "defaultQueryForEntity": true,
+            "effectiveBundleIdentifiers": [],
+            "entityType": "TemplateEntity",
+            "fullyQualifiedIdentifier": "Lattice.TemplateEntityQuery",
+            "identifier": "TemplateEntityQuery",
+            "mangledTypeName": "7Lattice19TemplateEntityQueryV",
+            "mangledTypeNameByBundleIdentifier": {},
+            "parameters": [],
+            "queryType": "TemplateEntityQuery",
+            "resultValueType": {
+                "entity": {
+                    "wrapper": {
+                        "typeName": "TemplateEntity"
+                    }
+                }
+            },
+            "sortingOptions": [],
+            "visibilityMetadata": {
+                "assistantOnly": false,
+                "isDiscoverable": true
+            }
+        }
+    },
+    "shortcutTileColor": 14,
+    "version": 1
+}

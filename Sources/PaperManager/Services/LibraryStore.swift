@@ -115,13 +115,18 @@ final class LibraryStore: ObservableObject {
             guard !query.isEmpty else { return true }
             return [
                 paper.title,
+                paper.subtitle ?? "",
                 paper.authorsDisplay,
+                (paper.editors ?? []).joined(separator: " "),
+                (paper.translators ?? []).joined(separator: " "),
                 paper.sourceDisplay,
                 paper.year.map(String.init) ?? "",
                 paper.doi,
                 paper.isbn,
+                paper.eprint,
                 paper.citekey,
-                paper.notes
+                paper.notes,
+                paper.customFields.map { "\($0.key) \($0.value)" }.joined(separator: " ")
             ].joined(separator: " ").lowercased().contains(query)
         }
         return filtered
@@ -264,11 +269,13 @@ final class LibraryStore: ObservableObject {
     func duplicatePaperID(for paper: Paper) -> UUID? {
         let doi = paper.doi.trimmed.lowercased()
         let isbn = paper.isbn.trimmed.lowercased()
+        let eprint = paper.eprint.trimmed.lowercased()
         let title = paper.title.trimmed.lowercased()
         return snapshot.papers.first { existing in
             if existing.id == paper.id { return false }
             if !doi.isEmpty && existing.doi.trimmed.lowercased() == doi { return true }
             if !isbn.isEmpty && existing.isbn.trimmed.lowercased() == isbn { return true }
+            if !eprint.isEmpty && existing.eprint.trimmed.lowercased() == eprint { return true }
             if !title.isEmpty && existing.title.trimmed.lowercased() == title {
                 return existing.year == paper.year
             }

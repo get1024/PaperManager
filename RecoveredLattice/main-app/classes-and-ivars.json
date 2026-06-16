@@ -1,0 +1,662 @@
+{
+  "Lattice": [
+    {
+      "mangled": "_TtC7LatticeP33_C7D8AF987D957F1B89482927F39FC7ED25HelpSidebarViewController",
+      "ivars": [
+        "onSelectionChanged",
+        "tableView",
+        "suppressSelectionCallback"
+      ],
+      "demangled": "Lattice.(HelpSidebarViewController in _C7D8AF987D957F1B89482927F39FC7ED)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_AE5253D56533978A4261FCE19708AEA537InitialSheetFirstResponderBlockerView",
+      "ivars": [
+        "hasClaimedInitialFirstResponder"
+      ],
+      "demangled": "Lattice.(InitialSheetFirstResponderBlockerView in _AE5253D56533978A4261FCE19708AEA5)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_A263E9237E1362D521AA157887DEFF0517PaperFileCellView",
+      "ivars": [
+        "iconView",
+        "nameField"
+      ],
+      "demangled": "Lattice.(PaperFileCellView in _A263E9237E1362D521AA157887DEFF05)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_A263E9237E1362D521AA157887DEFF0518PaperListTableView",
+      "ivars": [
+        "onKeyAction"
+      ],
+      "demangled": "Lattice.(PaperListTableView in _A263E9237E1362D521AA157887DEFF05)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_A263E9237E1362D521AA157887DEFF0519PaperRatingCellView",
+      "ivars": [
+        "starCount",
+        "starSpacing",
+        "starSize",
+        "starLayers",
+        "trackingArea",
+        "hoveredRating",
+        "rating",
+        "onRatingChange"
+      ],
+      "demangled": "Lattice.(PaperRatingCellView in _A263E9237E1362D521AA157887DEFF05)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_A263E9237E1362D521AA157887DEFF0517PaperTextCellView",
+      "ivars": [
+        "contentField"
+      ],
+      "demangled": "Lattice.(PaperTextCellView in _A263E9237E1362D521AA157887DEFF05)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_A263E9237E1362D521AA157887DEFF0518PaperTitleCellView",
+      "ivars": [
+        "iconView",
+        "titleField"
+      ],
+      "demangled": "Lattice.(PaperTitleCellView in _A263E9237E1362D521AA157887DEFF05)"
+    },
+    {
+      "mangled": "_TtCV7LatticeP33_C41A7E7EC382C9408CD6FD2A15E564DC24PassiveAdvancedTextField11Coordinator",
+      "ivars": [
+        "text",
+        "onFocusChange",
+        "focusNotificationGeneration"
+      ],
+      "demangled": "Lattice.(PassiveAdvancedTextField in _C41A7E7EC382C9408CD6FD2A15E564DC).Coordinator"
+    },
+    {
+      "mangled": "_TtCV7LatticeP33_C41A7E7EC382C9408CD6FD2A15E564DC24PassiveAdvancedTextField18PassiveNSTextField",
+      "ivars": [
+        "allowsUserInitiatedFocus",
+        "onBecomeFirstResponder"
+      ],
+      "demangled": "Lattice.(PassiveAdvancedTextField in _C41A7E7EC382C9408CD6FD2A15E564DC).PassiveNSTextField"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_B46F562DACDE6E8542E0F5F93ABFAB2419ResourceBundleClass",
+      "ivars": [],
+      "demangled": "Lattice.(ResourceBundleClass in _B46F562DACDE6E8542E0F5F93ABFAB24)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_FF291364A85646F73A87A87BED466D2419ResourceBundleClass",
+      "ivars": [],
+      "demangled": "Lattice.(ResourceBundleClass in _FF291364A85646F73A87A87BED466D24)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_533F36610E14B09E84D4813013E7FE5429SettingsSidebarViewController",
+      "ivars": [
+        "onSelectionChanged",
+        "tableView",
+        "suppressSelectionCallback"
+      ],
+      "demangled": "Lattice.(SettingsSidebarViewController in _533F36610E14B09E84D4813013E7FE54)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_21B7212E5FBDBC8DE66DDFDAAE2EB06A37SettingsTextEditingDismissMonitorView",
+      "ivars": [
+        "dismissTextEditing",
+        "observedWindow",
+        "monitor"
+      ],
+      "demangled": "Lattice.(SettingsTextEditingDismissMonitorView in _21B7212E5FBDBC8DE66DDFDAAE2EB06A)"
+    },
+    {
+      "mangled": "_TtC7LatticeP33_D653EE91299F5C5D882020A4F1E1B2B218SidebarOutlineView",
+      "ivars": [],
+      "demangled": "Lattice.(SidebarOutlineView in _D653EE91299F5C5D882020A4F1E1B2B2)"
+    },
+    {
+      "mangled": "_TtCV7LatticeP33_0CE144B148C39FDE88C7E79557362A0B20SidebarRepresentable11Coordinator",
+      "ivars": [
+        "parent",
+        "viewController",
+        "lastStableDataContext",
+        "lastAppliedDataContext"
+      ],
+      "demangled": "Lattice.(SidebarRepresentable in _0CE144B148C39FDE88C7E79557362A0B).Coordinator"
+    },
+    {
+      "mangled": "_TtC7Lattice16AppCommandRouter",
+      "ivars": [
+        "_hasHandlers",
+        "handlers"
+      ],
+      "demangled": "Lattice.AppCommandRouter"
+    },
+    {
+      "mangled": "_TtCV7Lattice16AppKitMenuButton11Coordinator",
+      "ivars": [
+        "buildMenu"
+      ],
+      "demangled": "Lattice.AppKitMenuButton.Coordinator"
+    },
+    {
+      "mangled": "_TtC7Lattice25EditingDismissMonitorView",
+      "ivars": [
+        "onOutsideClick",
+        "shouldDismiss",
+        "isEnabled",
+        "observedWindow",
+        "monitor"
+      ],
+      "demangled": "Lattice.EditingDismissMonitorView"
+    },
+    {
+      "mangled": "_TtC7Lattice19HelpNavigationState",
+      "ivars": [
+        "_selectedTab"
+      ],
+      "demangled": "Lattice.HelpNavigationState"
+    },
+    {
+      "mangled": "_TtC7Lattice23HelpSplitViewController",
+      "ivars": [
+        "onSelectionChanged",
+        "sidebarViewController",
+        "detailHostingController",
+        "$__lazy_storage_$_sidebarItem",
+        "$__lazy_storage_$_detailItem"
+      ],
+      "demangled": "Lattice.HelpSplitViewController"
+    },
+    {
+      "mangled": "_TtC7Lattice17InspectorPinStore",
+      "ivars": [
+        "defaults",
+        "_snapshot",
+        "_unpinnedSnapshot",
+        "defaultsChanges"
+      ],
+      "demangled": "Lattice.InspectorPinStore"
+    },
+    {
+      "mangled": "_TtCO7Lattice15LatticeArchiverP33_A01F45842F262703751521556CD7CBA017ProcessController",
+      "ivars": [
+        "lock",
+        "process",
+        "outputPipe",
+        "errorPipe",
+        "pipesClosed"
+      ],
+      "demangled": "Lattice.LatticeArchiver.(ProcessController in _A01F45842F262703751521556CD7CBA0)"
+    },
+    {
+      "mangled": "_TtC7Lattice25LibraryRestoreCoordinator",
+      "ivars": [
+        "_activeRestoreSessionID",
+        "_completedRestoreGeneration"
+      ],
+      "demangled": "Lattice.LibraryRestoreCoordinator"
+    },
+    {
+      "mangled": "_TtC7Lattice25LocalCitationBridgeServer",
+      "ivars": [
+        "modelContainer",
+        "defaults",
+        "queue",
+        "paperRefreshCoordinator",
+        "listener",
+        "discoveryListener"
+      ],
+      "demangled": "Lattice.LocalCitationBridgeServer"
+    },
+    {
+      "mangled": "_TtC7Lattice27MainMenuSearchCommandBridge",
+      "ivars": [
+        "router",
+        "keyMonitor",
+        "patchedMenuItem",
+        "originalFindMenuItemState"
+      ],
+      "demangled": "Lattice.MainMenuSearchCommandBridge"
+    },
+    {
+      "mangled": "_TtC7Lattice23MainSplitViewController",
+      "ivars": [
+        "onToggleInspector",
+        "onImportFiles",
+        "onAddDOI",
+        "onAddManual",
+        "onExportBibtex",
+        "onExportRis",
+        "onExportDetailed",
+        "contentSplitController",
+        "addPopover",
+        "exportPopover",
+        "hasScheduledDeferredWindowRefresh",
+        "activeWindowResizeInterval",
+        "observedResizeWindow"
+      ],
+      "demangled": "Lattice.MainSplitViewController"
+    },
+    {
+      "mangled": "_TtCC7Lattice23MainSplitViewControllerP33_426A4C46B779C2DDA9ACC6627ABCDD4526ContentSplitViewController",
+      "ivars": [
+        "sidebarHostingController",
+        "centerHostingController",
+        "pendingSidebarToggleInterval",
+        "$__lazy_storage_$_sidebarItem",
+        "$__lazy_storage_$_centerItem"
+      ],
+      "demangled": "Lattice.MainSplitViewController.(ContentSplitViewController in _426A4C46B779C2DDA9ACC6627ABCDD45)"
+    },
+    {
+      "mangled": "_TtC7Lattice17MenuActionHandler",
+      "ivars": [
+        "action"
+      ],
+      "demangled": "Lattice.MenuActionHandler"
+    },
+    {
+      "mangled": "_TtC7Lattice16MetadataTemplate",
+      "ivars": [
+        "_id",
+        "_name",
+        "_content",
+        "_isDefault",
+        "_dateCreated"
+      ],
+      "demangled": "Lattice.MetadataTemplate"
+    },
+    {
+      "mangled": "_TtCV7Lattice17NativeSearchField11Coordinator",
+      "ivars": [
+        "text",
+        "isFocusRequestScheduled"
+      ],
+      "demangled": "Lattice.NativeSearchField.Coordinator"
+    },
+    {
+      "mangled": "_TtC7Lattice17PDFAnnotationItem",
+      "ivars": [
+        "_type",
+        "_pageIndex",
+        "_pageLabel",
+        "_boundsX",
+        "_boundsY",
+        "_boundsWidth",
+        "_boundsHeight",
+        "_text",
+        "_contents",
+        "_colorHex",
+        "_renderedImageData",
+        "_sortOrder",
+        "_paper"
+      ],
+      "demangled": "Lattice.PDFAnnotationItem"
+    },
+    {
+      "mangled": "_TtCV7Lattice30PDFStructuredMetadataExtractorP33_1D4030BD7834382BE9D0CD0026243F4B17XMPParserDelegate",
+      "ivars": [
+        "elementStack",
+        "textBuffer",
+        "titles",
+        "creators",
+        "descriptions",
+        "subjects",
+        "journal",
+        "publisher",
+        "doi",
+        "volume",
+        "issue",
+        "pageRange",
+        "startPage",
+        "endPage",
+        "year",
+        "isbn"
+      ],
+      "demangled": "Lattice.PDFStructuredMetadataExtractor.(XMPParserDelegate in _1D4030BD7834382BE9D0CD0026243F4B)"
+    },
+    {
+      "mangled": "_TtC7Lattice5Paper",
+      "ivars": [
+        "_id",
+        "_title",
+        "_authors",
+        "_year",
+        "_journal",
+        "_doi",
+        "_abstract",
+        "_volume",
+        "_issue",
+        "_pages",
+        "_paperType",
+        "_pdfBookmark",
+        "_notes",
+        "_rating",
+        "_dateAdded",
+        "_bibtexKey",
+        "_isbn",
+        "_subtitle",
+        "_editors",
+        "_translators",
+        "_publisher",
+        "_booktitle",
+        "_address",
+        "_edition",
+        "_series",
+        "_chapter",
+        "_institution",
+        "_school",
+        "_type",
+        "_howpublished",
+        "_organization",
+        "_language",
+        "_month",
+        "_url",
+        "_urlDate",
+        "_eprint",
+        "_eprintType",
+        "_eprintClass",
+        "_pubState",
+        "_eventTitle",
+        "_eventDate",
+        "_venue",
+        "_extraFieldsData",
+        "_collections",
+        "_tags",
+        "_annotations",
+        "_attachments",
+        "activePDFAttachID"
+      ],
+      "demangled": "Lattice.Paper"
+    },
+    {
+      "mangled": "_TtC7Lattice15PaperAttachment",
+      "ivars": [
+        "_id",
+        "_bookmark",
+        "_filename",
+        "_dateAdded",
+        "_paper"
+      ],
+      "demangled": "Lattice.PaperAttachment"
+    },
+    {
+      "mangled": "_TtC7Lattice15PaperCollection",
+      "ivars": [
+        "_id",
+        "_name",
+        "_icon",
+        "_sortOrder",
+        "_papers",
+        "_parent",
+        "_children"
+      ],
+      "demangled": "Lattice.PaperCollection"
+    },
+    {
+      "mangled": "_TtC7Lattice16PaperOutlineNode",
+      "ivars": [
+        "kind"
+      ],
+      "demangled": "Lattice.PaperOutlineNode"
+    },
+    {
+      "mangled": "_TtC7Lattice23PaperRefreshCoordinator",
+      "ivars": [
+        "_remainingCount",
+        "_totalCount",
+        "_currentStepDescription",
+        "_isBulkImportFinalizationActive",
+        "queue",
+        "enrichmentBacklog",
+        "enrichmentTasks",
+        "queuedPaperIDs",
+        "organizePaperIDs",
+        "bulkImportFinalizationPaperIDs",
+        "workerTask",
+        "bulkUndoSuppressionContext"
+      ],
+      "demangled": "Lattice.PaperRefreshCoordinator"
+    },
+    {
+      "mangled": "_TtC7Lattice24PaperTableViewController",
+      "ivars": [
+        "onSelectionChange",
+        "onActivePaperChange",
+        "onSortChange",
+        "onColumnStateChange",
+        "onOpenPDFs",
+        "onRefreshMetadata",
+        "onExportBibtex",
+        "onExportRis",
+        "onExportDetailed",
+        "onCopyBibtex",
+        "onCopyRis",
+        "onDeletePapers",
+        "onOrganizePDFs",
+        "onRenamePDFs",
+        "onRatingChange",
+        "onSelectionFocusHandled",
+        "modelContext",
+        "paperIDs",
+        "rowSnapshots",
+        "rootNodes",
+        "nodesByPaperID",
+        "snapshotsByID",
+        "childRowsByPaperID",
+        "childNodesByPaperID",
+        "collections",
+        "tags",
+        "appliedSortState",
+        "appliedColumnState",
+        "isApplyingSelection",
+        "isApplyingSort",
+        "isApplyingColumnState",
+        "preservesCurrentFileSelection",
+        "pendingSelectionFocusRequestID",
+        "handledSelectionFocusRequestID",
+        "tableView",
+        "scrollView",
+        "rowMenu",
+        "headerMenu",
+        "columnsByID",
+        "rowMenuPayloads",
+        "headerMenuPayloads"
+      ],
+      "demangled": "Lattice.PaperTableViewController"
+    },
+    {
+      "mangled": "_TtC7Lattice19ProUnlockController",
+      "ivars": [
+        "_product",
+        "_isProUnlocked",
+        "_isLoadingStoreInfo",
+        "_isPurchasing",
+        "_isRestoringPurchases",
+        "_storeNotice",
+        "_upgradeContext",
+        "transactionUpdatesTask"
+      ],
+      "demangled": "Lattice.ProUnlockController"
+    },
+    {
+      "mangled": "_TtCO7Lattice15QuickLookHelperP33_052CA1A1B1FFCB7FD0DF4F7C427AF67214PreviewSession",
+      "ivars": [
+        "scopedURL",
+        "comparisonURL",
+        "accessingSecurityScope",
+        "hasReleasedSecurityScope"
+      ],
+      "demangled": "Lattice.QuickLookHelper.(PreviewSession in _052CA1A1B1FFCB7FD0DF4F7C427AF672)"
+    },
+    {
+      "mangled": "_TtC7Lattice27SettingsSplitViewController",
+      "ivars": [
+        "onSelectionChanged",
+        "sidebarViewController",
+        "detailHostingController",
+        "$__lazy_storage_$_sidebarItem",
+        "$__lazy_storage_$_detailItem"
+      ],
+      "demangled": "Lattice.SettingsSplitViewController"
+    },
+    {
+      "mangled": "_TtC7Lattice21SidebarAddPlaceholder",
+      "ivars": [
+        "kind"
+      ],
+      "demangled": "Lattice.SidebarAddPlaceholder"
+    },
+    {
+      "mangled": "_TtC7Lattice21SidebarCollectionItem",
+      "ivars": [
+        "id",
+        "name",
+        "icon",
+        "count",
+        "children",
+        "depth"
+      ],
+      "demangled": "Lattice.SidebarCollectionItem"
+    },
+    {
+      "mangled": "_TtC7Lattice17SidebarFilterItem",
+      "ivars": [
+        "filter",
+        "count"
+      ],
+      "demangled": "Lattice.SidebarFilterItem"
+    },
+    {
+      "mangled": "_TtC7Lattice19SidebarItemCellView",
+      "ivars": [
+        "countField",
+        "accentHexColor",
+        "originalTitle",
+        "editCallback"
+      ],
+      "demangled": "Lattice.SidebarItemCellView"
+    },
+    {
+      "mangled": "_TtC7Lattice28SidebarOutlineViewController",
+      "ivars": [
+        "delegate",
+        "outlineView",
+        "scrollView",
+        "$__lazy_storage_$_emptyMenuStateImage",
+        "sections",
+        "filterItems",
+        "collectionItems",
+        "tagItems",
+        "collectionNodeMap",
+        "tagNodeMap",
+        "addCollectionPlaceholder",
+        "addTagPlaceholder",
+        "isAddingCollection",
+        "isAddingTag",
+        "addingCollectionParentID",
+        "pendingExpandParentID",
+        "pendingSelectionRestore",
+        "currentSelection",
+        "suppressSelectionCallback",
+        "needsSelectionOnExpand",
+        "pendingRenameItem",
+        "expandLibraryKey",
+        "expandCollectionsKey",
+        "expandTagsKey",
+        "menuPayloads",
+        "hasPerformedInitialUpdate"
+      ],
+      "demangled": "Lattice.SidebarOutlineViewController"
+    },
+    {
+      "mangled": "_TtC7Lattice14SidebarSection",
+      "ivars": [
+        "kind",
+        "title"
+      ],
+      "demangled": "Lattice.SidebarSection"
+    },
+    {
+      "mangled": "_TtC7Lattice14SidebarTagItem",
+      "ivars": [
+        "id",
+        "name",
+        "color",
+        "count"
+      ],
+      "demangled": "Lattice.SidebarTagItem"
+    },
+    {
+      "mangled": "_TtC7Lattice26SidebarUnemphasizedRowView",
+      "ivars": [],
+      "demangled": "Lattice.SidebarUnemphasizedRowView"
+    },
+    {
+      "mangled": "_TtC7Lattice20SplitViewCoordinator",
+      "ivars": [
+        "suspendSidebarDataUpdates",
+        "isRefreshActive",
+        "refreshCompletedCount",
+        "refreshTotalCount",
+        "refreshProgress",
+        "selectedFilter",
+        "selectedCollection",
+        "selectedTag",
+        "suspendPaperListDisplayUpdates",
+        "selectedPaper",
+        "selectedPaperIDs",
+        "isMetadataRefreshQueued",
+        "requestMetadataRefresh",
+        "requestDetailedExport",
+        "controller",
+        "pendingState",
+        "isStateFlushScheduled"
+      ],
+      "demangled": "Lattice.SplitViewCoordinator"
+    },
+    {
+      "mangled": "_TtC7Lattice3Tag",
+      "ivars": [
+        "_id",
+        "_name",
+        "_color",
+        "_sortOrder",
+        "_papers"
+      ],
+      "demangled": "Lattice.Tag"
+    },
+    {
+      "mangled": "_TtC7Lattice10TagDotView",
+      "ivars": [
+        "hex"
+      ],
+      "demangled": "Lattice.TagDotView"
+    },
+    {
+      "mangled": "_TtCO7Lattice19ZoteroImportServiceP33_3C808971350685C45D9793D0F3F0F66018PDFTransferMonitor",
+      "ivars": [
+        "phase",
+        "lastProgressAt",
+        "bytesCopied",
+        "cancelRequested",
+        "completion"
+      ],
+      "demangled": "Lattice.ZoteroImportService.(PDFTransferMonitor in _3C808971350685C45D9793D0F3F0F660)"
+    }
+  ],
+  "LatticePicker": [
+    {
+      "mangled": "_TtC13LatticePicker17PickerAppDelegate",
+      "ivars": [
+        "searchField",
+        "tableView",
+        "statusLabel",
+        "items",
+        "debounceTimer",
+        "fetchTask",
+        "retryTask",
+        "isLoading",
+        "initialRetryDone"
+      ],
+      "demangled": "LatticePicker.PickerAppDelegate"
+    }
+  ]
+}

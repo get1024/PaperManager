@@ -7,70 +7,37 @@ struct PaperListView: View {
     @Binding var searchText: String
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-
+        Group {
             if papers.isEmpty {
-                LatticeEmptyState(
+                PaperManagerEmptyState(
                     systemImage: searchText.isEmpty ? "doc.text" : "magnifyingglass",
                     title: searchText.isEmpty ? "暂无文献" : "没有结果",
-                    message: searchText.isEmpty ? "导入 PDF、BibTeX 文件，或通过 DOI 添加文献。" : "换一个标题、作者、期刊、年份或 citekey 试试。"
+                    message: searchText.isEmpty ? "导入 PDF、BibTeX 文件，或通过 DOI、arXiv、ISBN 添加文献。" : "换一个标题、作者、期刊、年份或 citekey 试试。"
                 )
             } else {
                 List(papers, selection: $selection) { paper in
                     PaperRowView(paper: paper)
                         .tag(paper.id)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowSeparator(.hidden)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             }
-
+        }
+        .safeAreaInset(edge: .bottom) {
             footer
         }
-        .background(LatticeStyle.contentBackground)
-    }
-
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(.title3)
-                .fontWeight(.bold)
-                .lineLimit(1)
-
-            Spacer()
-
-            if !searchText.trimmed.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Label("清除搜索", systemImage: "xmark.circle.fill")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("清除搜索")
-            }
-        }
-        .padding(.top, 22)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 14)
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
+        HStack {
             Text("\(papers.count) 篇文献")
             if !selection.isEmpty {
-                Text("-")
                 Text("已选择 \(selection.count) 篇")
             }
             Spacer()
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal)
+        .padding(.vertical, 5)
         .background(.bar)
     }
 }
@@ -78,78 +45,49 @@ struct PaperListView: View {
 private struct PaperRowView: View {
     let paper: Paper
 
+    private var metadata: String {
+        [
+            paper.authorsDisplay,
+            paper.year.map(String.init) ?? "",
+            paper.sourceDisplay
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: paper.hasPDF ? "doc.richtext" : "doc.text")
-                .font(.system(size: 19, weight: .regular))
-                .foregroundStyle(paper.hasPDF ? Color.accentColor : Color.secondary)
-                .frame(width: 28, height: 34)
-
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(paper.displayTitle)
-                    .font(.callout)
-                    .fontWeight(.semibold)
                     .lineLimit(2)
-
-                HStack(spacing: 8) {
-                    Text(paper.authorsDisplay)
-                        .lineLimit(1)
-
-                    if let year = paper.year {
-                        Text("\(year)")
-                    }
-
-                    if !paper.sourceDisplay.isEmpty {
-                        Text(paper.sourceDisplay)
-                            .lineLimit(1)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                HStack(spacing: 6) {
-                    if !paper.citekey.isEmpty {
-                        pill(paper.citekey, systemImage: "number")
-                    }
-                    if !paper.doi.isEmpty {
-                        pill("DOI", systemImage: "link")
-                    }
-                    if paper.hasPDF {
-                        pill("PDF", systemImage: "paperclip")
-                    }
-                    if paper.rating > 0 {
-                        RatingDisplay(rating: paper.rating)
-                            .font(.caption2)
-                    }
+                Spacer()
+                if paper.hasPDF {
+                    Image(systemName: "paperclip")
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            Spacer(minLength: 8)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(0.035))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(LatticeStyle.separator, lineWidth: 0.5)
-        )
-    }
+            if !metadata.isEmpty {
+                Text(metadata)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
-    private func pill(_ text: String, systemImage: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: systemImage)
-            Text(text)
-                .lineLimit(1)
+            HStack(spacing: 8) {
+                if !paper.citekey.isEmpty {
+                    Text(paper.citekey)
+                }
+                if !paper.doi.isEmpty {
+                    Text("DOI")
+                }
+                if paper.rating > 0 {
+                    RatingDisplay(rating: paper.rating)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(
-            Capsule()
-                .fill(Color.primary.opacity(0.055))
-        )
     }
 }

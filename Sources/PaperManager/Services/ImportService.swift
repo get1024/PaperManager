@@ -57,7 +57,18 @@ enum ImportService {
     }
 
     static func addViaDOI(_ doi: String, into store: LibraryStore, targetFilter: LibraryFilter?) async throws -> UUID {
-        let metadata = try await CrossrefClient.fetch(doi: doi)
+        let metadata = try await MetadataLookupClient.lookup(doi: doi, arxivID: nil, isbn: nil, title: nil)
+        return store.addOrReplacePaper(metadata.asPaper, targetFilter: targetFilter)
+    }
+
+    static func addViaLookup(_ query: String, into store: LibraryStore, targetFilter: LibraryFilter?) async throws -> UUID {
+        let clean = query.trimmed
+        let metadata = try await MetadataLookupClient.lookup(
+            doi: clean.looksLikeDOI ? clean : nil,
+            arxivID: clean.looksLikeArxivID ? clean : nil,
+            isbn: clean.looksLikeISBN ? clean : nil,
+            title: clean.looksLikeDOI || clean.looksLikeArxivID || clean.looksLikeISBN ? nil : clean
+        )
         return store.addOrReplacePaper(metadata.asPaper, targetFilter: targetFilter)
     }
 

@@ -1,0 +1,33 @@
+/Applications/Lattice.app/Contents/_CodeSignature/CodeResources
+/Applications/Lattice.app/Contents/_MASReceipt/receipt
+/Applications/Lattice.app/Contents/MacOS/LatticePicker
+/Applications/Lattice.app/Contents/MacOS/Lattice
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/_CodeSignature/CodeResources
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/MacOS/Lattice Safari Extension Extension
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/service-worker-loader.js
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/icons/48.png
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/icons/128.png
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/icons/16.png
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/icons/38.png
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/icons/32.png
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/icons/19.png
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/manifest.json
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/assets/popup.html-9JQg6kIR.js
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/assets/browser-polyfill-DgstG05v.js
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/assets/index.ts-BKvYs8kc.js
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/assets/popup-B7OSUNGE.css
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Resources/src/popup/popup.html
+/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/Info.plist
+/Applications/Lattice.app/Contents/Resources/zh-Hans.lproj/Help.strings
+/Applications/Lattice.app/Contents/Resources/zh-Hans.lproj/Localizable.strings
+/Applications/Lattice.app/Contents/Resources/zh-Hans.lproj/InfoPlist.strings
+/Applications/Lattice.app/Contents/Resources/en.lproj/Localizable.strings
+/Applications/Lattice.app/Contents/Resources/en.lproj/InfoPlist.strings
+/Applications/Lattice.app/Contents/Resources/Metadata.appintents/version.json
+/Applications/Lattice.app/Contents/Resources/Metadata.appintents/extract.actionsdata
+/Applications/Lattice.app/Contents/Resources/icon2.icns
+/Applications/Lattice.app/Contents/Resources/Lattice Pro.storekit
+/Applications/Lattice.app/Contents/Resources/Assets.car
+/Applications/Lattice.app/Contents/Resources/PrivacyInfo.xcprivacy
+/Applications/Lattice.app/Contents/Info.plist
+/Applications/Lattice.app/Contents/PkgInfo

@@ -142,12 +142,16 @@ struct Paper: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var citekey: String = ""
     var title: String = ""
+    var subtitle: String?
     var authors: [String] = []
+    var editors: [String]?
+    var translators: [String]?
     var year: Int?
     var paperType: PaperType = .article
 
     var journal: String = ""
     var bookTitle: String = ""
+    var address: String?
     var publisher: String = ""
     var institution: String = ""
     var school: String = ""
@@ -159,6 +163,7 @@ struct Paper: Identifiable, Codable, Hashable {
     var doi: String = ""
     var isbn: String = ""
     var url: String = ""
+    var urlDate: String?
     var language: String = ""
     var abstract: String = ""
     var notes: String = ""
@@ -167,11 +172,13 @@ struct Paper: Identifiable, Codable, Hashable {
     var venue: String = ""
     var edition: String = ""
     var chapter: String = ""
+    var type: String?
     var eprint: String = ""
     var eprintType: String = ""
     var eprintClass: String = ""
     var publicationState: String = ""
     var howPublished: String = ""
+    var organization: String?
 
     var rating: Int = 0
     var collectionIDs: [UUID] = []
@@ -193,6 +200,22 @@ struct Paper: Identifiable, Codable, Hashable {
                 .split(separator: ";")
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
+        }
+    }
+
+    var editorsText: String {
+        get { (editors ?? []).joined(separator: "; ") }
+        set {
+            let values = Self.splitNameList(newValue)
+            editors = values.isEmpty ? nil : values
+        }
+    }
+
+    var translatorsText: String {
+        get { (translators ?? []).joined(separator: "; ") }
+        set {
+            let values = Self.splitNameList(newValue)
+            translators = values.isEmpty ? nil : values
         }
     }
 
@@ -219,7 +242,15 @@ struct Paper: Identifiable, Codable, Hashable {
 
     var hasIdentifier: Bool {
         !doi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-        !isbn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isbn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !eprint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func splitNameList(_ value: String) -> [String] {
+        value
+            .split(separator: ";")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 }
 

@@ -10,7 +10,7 @@
 
 PaperManager is a native macOS reference manager for collecting, organizing, reading, and exporting academic papers.
 
-- Import PDF, BibTeX, RIS, folders, and DOI metadata.
+- Import PDF, BibTeX, RIS, folders, DOI, arXiv, ISBN, and title metadata.
 - Organize papers with collections, tags, ratings, citekeys, and custom fields.
 - Attach PDFs, extract PDF metadata and annotations, and open papers in a preferred PDF reader.
 - Export BibTeX, RIS, and Markdown metadata using editable templates.
@@ -23,6 +23,7 @@ PaperManager is a native macOS reference manager for collecting, organizing, rea
 - [June 16, 2026] Reworked the main SwiftUI shell to mirror Lattice-style navigation: sidebar search, document filters, centered empty states, compact toolbar menus, and inspector toggling.
 - [June 16, 2026] Rebuilt Settings with a Lattice-style sidebar and grouped controls for General, Citation, Local API, Backup, and Templates.
 - [June 16, 2026] Added preferred PDF reader configuration while preserving existing PDF organization, rename, copy/move, export, and Local API logic.
+- [June 16, 2026] Expanded the recovered Lattice-compatible connector: metadata lookup now accepts DOI, arXiv ID, ISBN, or title, and exports preserve richer BibTeX/RIS fields.
 
 ## 3. Use
 
@@ -54,7 +55,7 @@ Use the `+` menu or `Command-I` to import local files:
 PDF, BibTeX, RIS, or folders containing supported files
 ```
 
-Use `Shift-Command-D` to add a paper by DOI through Crossref metadata lookup.
+Use `Shift-Command-D` to add a paper by DOI, arXiv ID, ISBN, or title through metadata lookup.
 
 ### 3.3 Export
 
@@ -91,9 +92,9 @@ The snapshot contains papers, collections, tags, settings, attachments, annotati
 ### 4.2 Import Pipeline
 
 - PDF metadata and annotation extraction use PDFKit.
-- DOI enrichment uses Crossref.
+- Metadata enrichment uses Crossref for DOI/title, arXiv for preprints, and OpenLibrary for ISBN.
 - BibTeX and RIS imports use local parsers.
-- Duplicate detection checks DOI, ISBN, and title/year.
+- Duplicate detection checks DOI, ISBN, eprint/arXiv, and title/year.
 - PDF organization can copy or move attachments into a chosen folder, grouped by year, author initial, or collection.
 
 ### 4.3 Local API
@@ -111,7 +112,10 @@ Implemented endpoints include:
 | `GET /connector/status` | Connector status and capabilities |
 | `GET /connector/collections` | Collection list |
 | `GET /connector/tags` | Tag list |
-| `GET /connector/metadata?doi=...` | Crossref DOI lookup |
+| `GET /connector/metadata?doi=...` | DOI lookup |
+| `GET /connector/metadata?arxivId=...` | arXiv lookup |
+| `GET /connector/metadata?isbn=...` | ISBN lookup |
+| `GET /connector/metadata?title=...` | title lookup |
 | `POST /connector/papers` | Create a paper |
 | `PUT /connector/papers/{id}/pdf` | Attach/upload a PDF |
 | `GET /api/v1/papers` | Public API paper list |

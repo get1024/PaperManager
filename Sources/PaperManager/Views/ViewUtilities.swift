@@ -124,149 +124,16 @@ extension AppearanceChoice {
     }
 }
 
-enum LatticeStyle {
-    static let sidebarWidth: CGFloat = 250
-    static let inspectorWidth: CGFloat = 360
-    static let windowPadding: CGFloat = 18
-    static let rowRadius: CGFloat = 10
-    static let cardRadius: CGFloat = 16
-
-    static var sidebarBackground: Color {
-        Color(nsColor: .controlBackgroundColor)
-    }
-
-    static var contentBackground: Color {
-        Color(nsColor: .textBackgroundColor)
-    }
-
-    static var selectedFill: Color {
-        Color.accentColor.opacity(0.13)
-    }
-
-    static var groupedFill: Color {
-        Color(nsColor: .controlBackgroundColor).opacity(0.78)
-    }
-
-    static var separator: Color {
-        Color(nsColor: .separatorColor).opacity(0.62)
-    }
-}
-
-struct LatticeIconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(.primary)
-            .frame(width: 32, height: 32)
-            .background(
-                Circle()
-                    .fill(configuration.isPressed ? Color.primary.opacity(0.12) : Color.primary.opacity(0.055))
-            )
-    }
-}
-
-struct LatticeCard<Content: View>: View {
-    let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            content
-        }
-        .background(
-            RoundedRectangle(cornerRadius: LatticeStyle.cardRadius, style: .continuous)
-                .fill(LatticeStyle.groupedFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LatticeStyle.cardRadius, style: .continuous)
-                .stroke(LatticeStyle.separator, lineWidth: 0.6)
-        )
-    }
-}
-
-struct LatticeSection<Content: View>: View {
-    let title: String
-    let content: Content
-
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
-                .fontWeight(.semibold)
-            LatticeCard {
-                content
-            }
-        }
-    }
-}
-
-struct LatticeDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(LatticeStyle.separator)
-            .frame(height: 0.6)
-    }
-}
-
-struct LatticeSettingsRow<Trailing: View>: View {
-    let title: String
-    let subtitle: String?
-    let trailing: Trailing
-
-    init(_ title: String, subtitle: String? = nil, @ViewBuilder trailing: () -> Trailing) {
-        self.title = title
-        self.subtitle = subtitle
-        self.trailing = trailing()
-    }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.body)
-                    .fontWeight(.medium)
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            Spacer(minLength: 18)
-            trailing
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-    }
-}
-
-struct LatticeEmptyState: View {
+struct PaperManagerEmptyState: View {
     let systemImage: String
     let title: String
     let message: String
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(title)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(.secondary)
+        ContentUnavailableView {
+            Label(title, systemImage: systemImage)
+        } description: {
             Text(message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

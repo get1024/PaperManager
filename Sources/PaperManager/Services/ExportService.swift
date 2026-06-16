@@ -47,16 +47,30 @@ enum ExportService {
     private static func bibFields(for paper: Paper) -> [(key: String, value: String)] {
         var fields: [(String, String)] = []
         add("title", paper.title, to: &fields)
+        add("subtitle", paper.subtitle ?? "", to: &fields)
         if !paper.authors.isEmpty {
             add("author", paper.authors.joined(separator: " and "), to: &fields)
+        }
+        if let editors = paper.editors, !editors.isEmpty {
+            add("editor", editors.joined(separator: " and "), to: &fields)
+        }
+        if let translators = paper.translators, !translators.isEmpty {
+            add("translator", translators.joined(separator: " and "), to: &fields)
         }
         add("year", paper.year.map(String.init) ?? "", to: &fields)
         add("journal", paper.journal, to: &fields)
         add("booktitle", paper.bookTitle, to: &fields)
         add("publisher", paper.publisher, to: &fields)
+        add("address", paper.address ?? "", to: &fields)
+        add("edition", paper.edition, to: &fields)
         add("institution", paper.institution, to: &fields)
         add("school", paper.school, to: &fields)
         add("series", paper.series, to: &fields)
+        add("chapter", paper.chapter, to: &fields)
+        add("type", paper.type ?? "", to: &fields)
+        add("howpublished", paper.howPublished, to: &fields)
+        add("organization", paper.organization ?? "", to: &fields)
+        add("language", paper.language, to: &fields)
         add("volume", paper.volume, to: &fields)
         add("number", paper.issue, to: &fields)
         add("pages", paper.pages, to: &fields)
@@ -64,6 +78,14 @@ enum ExportService {
         add("doi", paper.doi, to: &fields)
         add("isbn", paper.isbn, to: &fields)
         add("url", paper.url, to: &fields)
+        add("urldate", paper.urlDate ?? "", to: &fields)
+        add("eprint", paper.eprint, to: &fields)
+        add("eprinttype", paper.eprintType, to: &fields)
+        add("eprintclass", paper.eprintClass, to: &fields)
+        add("pubstate", paper.publicationState, to: &fields)
+        add("eventtitle", paper.event, to: &fields)
+        add("eventdate", paper.eventDate, to: &fields)
+        add("venue", paper.venue, to: &fields)
         add("abstract", paper.abstract, to: &fields)
         add("note", paper.notes, to: &fields)
         for field in paper.customFields where !field.key.trimmed.isEmpty {
@@ -76,13 +98,19 @@ enum ExportService {
         var lines: [String] = ["TY  - \(paper.paperType.risType)"]
         appendRIS("ID", paper.citekey, to: &lines)
         appendRIS("T1", paper.title, to: &lines)
+        appendRIS("ST", paper.subtitle ?? "", to: &lines)
         for author in paper.authors {
             appendRIS("AU", author, to: &lines)
+        }
+        for editor in paper.editors ?? [] {
+            appendRIS("ED", editor, to: &lines)
         }
         appendRIS("PY", paper.year.map(String.init) ?? "", to: &lines)
         appendRIS("JO", paper.journal, to: &lines)
         appendRIS("T2", paper.bookTitle, to: &lines)
         appendRIS("PB", paper.publisher, to: &lines)
+        appendRIS("CY", paper.address ?? "", to: &lines)
+        appendRIS("ET", paper.edition, to: &lines)
         appendRIS("VL", paper.volume, to: &lines)
         appendRIS("IS", paper.issue, to: &lines)
         let pageParts = splitPages(paper.pages)
@@ -91,6 +119,9 @@ enum ExportService {
         appendRIS("DO", paper.doi, to: &lines)
         appendRIS("SN", paper.isbn, to: &lines)
         appendRIS("UR", paper.url, to: &lines)
+        appendRIS("Y2", paper.urlDate ?? "", to: &lines)
+        appendRIS("LA", paper.language, to: &lines)
+        appendRIS("M3", paper.type ?? "", to: &lines)
         appendRIS("AB", paper.abstract, to: &lines)
         appendRIS("N1", paper.notes, to: &lines)
         lines.append("ER  -")

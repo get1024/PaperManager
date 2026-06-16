@@ -3,242 +3,128 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var selectedFilter: LibraryFilter
-    @Binding var searchText: String
     @Binding var includeSubcollections: Bool
-    @FocusState private var searchFocused: Bool
 
     private var flattenedCollections: [FlattenedCollection] {
         flatten(parentID: nil, depth: 0)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            topBar
-                .padding(.top, 18)
-                .padding(.horizontal, 18)
+        List(selection: $selectedFilter) {
+            Section("文库") {
+                libraryRow("全部文献", systemImage: "books.vertical", count: store.papers.count, filter: .all)
+                libraryRow("未归类", systemImage: "tray", count: store.papers.filter(\.collectionIDs.isEmpty).count, filter: .unfiled)
+                libraryRow("缺少标识符", systemImage: "magnifyingglass.circle", count: store.papers.filter { !$0.hasIdentifier }.count, filter: .missingIDs)
+                libraryRow("缺少 PDF", systemImage: "paperclip", count: store.papers.filter { !$0.hasPDF }.count, filter: .missingPDF)
+            }
 
-            searchField
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    sidebarSection("文库") {
-                        sidebarButton("全部文献", systemImage: "books.vertical", count: store.papers.count, filter: .all)
-                        sidebarButton("未归类", systemImage: "tray", count: store.papers.filter(\.collectionIDs.isEmpty).count, filter: .unfiled)
-                        sidebarButton("缺少标识符", systemImage: "magnifyingglass.circle", count: store.papers.filter { !$0.hasIdentifier }.count, filter: .missingIDs)
-                        sidebarButton("缺少 PDF", systemImage: "paperclip", count: store.papers.filter { !$0.hasPDF }.count, filter: .missingPDF)
-                    }
-
-                    sidebarSection("文集") {
-                        if flattenedCollections.isEmpty {
-                            emptySidebarLine("暂无文集")
-                        } else {
-                            ForEach(flattenedCollections) { item in
-                                sidebarButton(
-                                    item.collection.name,
-                                    systemImage: "folder",
-                                    count: paperCount(collectionID: item.collection.id),
-                                    filter: .collection(item.collection.id),
-                                    depth: item.depth
-                                )
-                                .contextMenu {
-                                    Toggle("显示子文集文献", isOn: $includeSubcollections)
-                                    Button("新建子文集") { store.addCollection(name: "新建子文集", parentID: item.collection.id) }
-                                    Button("重命名") { renameCollection(item.collection) }
-                                    Button("删除", role: .destructive) { store.deleteCollection(id: item.collection.id) }
-                                }
-                            }
-                        }
-                    } trailing: {
-                        Button {
-                            store.addCollection(name: "新建文集")
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                        .buttonStyle(.plain)
-                        .help("新建文集")
-                    }
-
-                    sidebarSection("标签") {
-                        if store.tags.isEmpty {
-                            emptySidebarLine("暂无标签")
-                        } else {
-                            ForEach(store.tags) { tag in
-                                tagButton(tag)
-                                    .contextMenu {
-                                        Button("重命名") { renameTag(tag) }
-                                        Button("更改颜色") { recolorTag(tag) }
-                                        Button("删除", role: .destructive) { store.deleteTag(id: tag.id) }
-                                    }
-                            }
-                        }
-                    } trailing: {
-                        Button {
-                            store.addTag(name: "新建标签")
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                        .buttonStyle(.plain)
-                        .help("新建标签")
+            Section {
+                if flattenedCollections.isEmpty {
+                    Text("暂无文集")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(flattenedCollections) { item in
+                        collectionRow(item)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 18)
-                .padding(.bottom, 16)
+            } header: {
+                sectionHeader("文集") {
+                    store.addCollection(name: "新建文集")
+                }
+            }
+
+            Section {
+                if store.tags.isEmpty {
+                    Text("暂无标签")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.tags) { tag in
+                        tagRow(tag)
+                    }
+                }
+            } header: {
+                sectionHeader("标签") {
+                    store.addTag(name: "新建标签")
+                }
             }
 
             if let message = store.statusMessage {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.bar)
+                Section {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
-        .background(LatticeStyle.sidebarBackground)
+        .navigationTitle("PaperManager")
     }
 
-    private var topBar: some View {
+    @ViewBuilder
+    private func libraryRow(_ title: String, systemImage: String, count: Int, filter: LibraryFilter) -> some View {
+        let row = Label(title, systemImage: systemImage)
+            .tag(filter)
+
+        if count > 0 {
+            row.badge(count)
+        } else {
+            row
+        }
+    }
+
+    @ViewBuilder
+    private func collectionRow(_ item: FlattenedCollection) -> some View {
+        let filter = LibraryFilter.collection(item.collection.id)
+        let count = paperCount(collectionID: item.collection.id)
+        let row = Label(item.collection.name, systemImage: "folder")
+            .padding(.leading, CGFloat(item.depth * 12))
+            .tag(filter)
+            .contextMenu {
+                Toggle("显示子文集文献", isOn: $includeSubcollections)
+                Button("新建子文集") { store.addCollection(name: "新建子文集", parentID: item.collection.id) }
+                Button("重命名") { renameCollection(item.collection) }
+                Button("删除", role: .destructive) { store.deleteCollection(id: item.collection.id) }
+            }
+
+        if count > 0 {
+            row.badge(count)
+        } else {
+            row
+        }
+    }
+
+    @ViewBuilder
+    private func tagRow(_ tag: PaperTag) -> some View {
+        let count = paperCount(tagID: tag.id)
+        let row = HStack {
+            Circle()
+                .fill(Color(hex: tag.colorHex))
+                .frame(width: 8, height: 8)
+            Text(tag.name)
+        }
+        .tag(LibraryFilter.tag(tag.id))
+        .contextMenu {
+            Button("重命名") { renameTag(tag) }
+            Button("更改颜色") { recolorTag(tag) }
+            Button("删除", role: .destructive) { store.deleteTag(id: tag.id) }
+        }
+
+        if count > 0 {
+            row.badge(count)
+        } else {
+            row
+        }
+    }
+
+    private func sectionHeader(_ title: String, action: @escaping () -> Void) -> some View {
         HStack {
-            Text("PaperManager")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .lineLimit(1)
+            Text(title)
             Spacer()
-            Image(systemName: "sidebar.left")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("搜索文献", text: $searchText)
-                .textFieldStyle(.plain)
-                .focused($searchFocused)
-        }
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .frame(height: 34)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(0.055))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(searchFocused ? Color.accentColor.opacity(0.75) : Color.clear, lineWidth: 2)
-        )
-    }
-
-    private func sidebarSection<Content: View, Trailing: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content,
-        @ViewBuilder trailing: () -> Trailing
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                trailing()
+            Button(action: action) {
+                Image(systemName: "plus")
             }
-            .padding(.horizontal, 10)
-            content()
+            .buttonStyle(.borderless)
+            .help("新建\(title)")
         }
-    }
-
-    private func sidebarSection<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        sidebarSection(title, content: content) {
-            EmptyView()
-        }
-    }
-
-    private func sidebarButton(
-        _ title: String,
-        systemImage: String,
-        count: Int,
-        filter: LibraryFilter,
-        depth: Int = 0
-    ) -> some View {
-        Button {
-            selectedFilter = filter
-        } label: {
-            HStack(spacing: 9) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 18)
-                Text(title)
-                    .font(.callout)
-                    .fontWeight(selectedFilter == filter ? .semibold : .medium)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .foregroundStyle(selectedFilter == filter ? Color.accentColor : Color.primary)
-            .padding(.leading, 10 + CGFloat(depth * 14))
-            .padding(.trailing, 10)
-            .frame(height: 36)
-            .background(
-                RoundedRectangle(cornerRadius: LatticeStyle.rowRadius, style: .continuous)
-                    .fill(selectedFilter == filter ? LatticeStyle.selectedFill : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func tagButton(_ tag: PaperTag) -> some View {
-        Button {
-            selectedFilter = .tag(tag.id)
-        } label: {
-            HStack(spacing: 9) {
-                Circle()
-                    .fill(Color(hex: tag.colorHex))
-                    .frame(width: 10, height: 10)
-                    .frame(width: 18)
-                Text(tag.name)
-                    .font(.callout)
-                    .fontWeight(selectedFilter == .tag(tag.id) ? .semibold : .medium)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                let count = paperCount(tagID: tag.id)
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .foregroundStyle(selectedFilter == .tag(tag.id) ? Color.accentColor : Color.primary)
-            .padding(.horizontal, 10)
-            .frame(height: 36)
-            .background(
-                RoundedRectangle(cornerRadius: LatticeStyle.rowRadius, style: .continuous)
-                    .fill(selectedFilter == .tag(tag.id) ? LatticeStyle.selectedFill : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func emptySidebarLine(_ title: String) -> some View {
-        Text(title)
-            .font(.callout)
-            .foregroundStyle(.tertiary)
-            .padding(.horizontal, 10)
-            .frame(height: 32, alignment: .leading)
     }
 
     private func flatten(parentID: UUID?, depth: Int) -> [FlattenedCollection] {

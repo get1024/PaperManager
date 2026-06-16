@@ -32,6 +32,28 @@ extension String {
             .replacingOccurrences(of: "&#39;", with: "'")
             .trimmed
     }
+
+    var looksLikeDOI: Bool {
+        range(of: #"(?i)\b10\.\d{4,9}/\S+"#, options: .regularExpression) != nil ||
+        lowercased().hasPrefix("https://doi.org/") ||
+        lowercased().hasPrefix("http://doi.org/")
+    }
+
+    var looksLikeArxivID: Bool {
+        let clean = trimmed
+            .replacingOccurrences(of: #"(?i)^arxiv:\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\.pdf$"#, with: "", options: .regularExpression)
+        return clean.range(
+            of: #"^([a-z.-]+/\d{7}|\d{4}\.\d{4,5})(v\d+)?$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    var looksLikeISBN: Bool {
+        let clean = replacingOccurrences(of: #"[^0-9Xx]"#, with: "", options: .regularExpression)
+        guard clean.count == 10 || clean.count == 13 else { return false }
+        return range(of: #"(?i)^(isbn(?:-1[03])?:?\s*)?[0-9Xx][0-9Xx\s-]+$"#, options: .regularExpression) != nil
+    }
 }
 
 extension Optional where Wrapped == String {

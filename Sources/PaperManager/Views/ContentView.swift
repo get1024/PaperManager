@@ -12,7 +12,7 @@ struct ContentView: View {
     @State private var showManualAdd = false
     @State private var showDOIAdd = false
     @State private var includeSubcollections = true
-    @State private var showInspector = true
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var visiblePapers: [Paper] {
         store.filteredPapers(for: selectedFilter, searchText: searchText, includeSubcollections: includeSubcollections)
@@ -35,45 +35,32 @@ struct ContentView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView(
                 selectedFilter: $selectedFilter,
-                searchText: $searchText,
                 includeSubcollections: $includeSubcollections
             )
-            .frame(width: LatticeStyle.sidebarWidth)
-
-            Rectangle()
-                .fill(LatticeStyle.separator)
-                .frame(width: 0.6)
-
+        } content: {
             PaperListView(
                 title: selectedTitle,
                 papers: visiblePapers,
                 selection: $selectedPaperIDs,
                 searchText: $searchText
             )
-            .frame(minWidth: 470)
-
-            if showInspector {
-                Rectangle()
-                    .fill(LatticeStyle.separator)
-                    .frame(width: 0.6)
-
-                PaperDetailView(selection: $selectedPaperIDs)
-                    .frame(width: LatticeStyle.inspectorWidth)
-            }
+            .navigationTitle(selectedTitle)
+        } detail: {
+            PaperDetailView(selection: $selectedPaperIDs)
         }
-        .background(LatticeStyle.contentBackground)
+        .searchable(text: $searchText, prompt: "搜索文献")
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
                     Button("导入文件...") { showImporter = true }
-                    Button("通过 DOI 添加...") { showDOIAdd = true }
+                    Button("通过标识符添加...") { showDOIAdd = true }
                     Button("手动添加...") { showManualAdd = true }
                 } label: {
-                    Image(systemName: "plus")
+                    Label("添加", systemImage: "plus")
                 }
 
                 Menu {
@@ -84,21 +71,14 @@ struct ContentView: View {
                     Button("复制 BibTeX") { ExportService.copyToPasteboard(ExportService.bibTeX(for: targetPapers)) }
                     Button("复制 RIS") { ExportService.copyToPasteboard(ExportService.ris(for: targetPapers)) }
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Label("导出", systemImage: "square.and.arrow.up")
                 }
-
-                Button {
-                    showInspector.toggle()
-                } label: {
-                    Image(systemName: "sidebar.right")
-                }
-                .help(showInspector ? "隐藏检查器" : "显示检查器")
 
                 Button(role: .destructive) {
                     store.deletePapers(ids: selectedPaperIDs)
                     selectedPaperIDs.removeAll()
                 } label: {
-                    Image(systemName: "trash")
+                    Label("删除", systemImage: "trash")
                 }
                 .disabled(selectedPaperIDs.isEmpty)
                 .help("删除所选文献")

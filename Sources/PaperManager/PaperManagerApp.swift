@@ -12,8 +12,6 @@ struct PaperManagerApp: App {
                 .environmentObject(localAPI)
                 .frame(minWidth: 1080, minHeight: 680)
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unifiedCompact)
         .commands {
             PaperManagerCommands()
         }
@@ -35,7 +33,7 @@ struct PaperManagerCommands: Commands {
             }
             .keyboardShortcut("i", modifiers: [.command])
 
-            Button("通过 DOI 添加...") {
+            Button("通过标识符添加...") {
                 NotificationCenter.default.post(name: .paperManagerDOIRequested, object: nil)
             }
             .keyboardShortcut("d", modifiers: [.command, .shift])

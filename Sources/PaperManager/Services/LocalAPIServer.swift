@@ -116,10 +116,10 @@ final class LocalAPIServer: ObservableObject {
         let isConnector = path.hasPrefix("/connector")
         let isPublicAPI = path.hasPrefix("/api/v1")
 
-        if isPublicAPI, store.settings.localAPIReadOnly, request.method != "GET" {
+        if (isPublicAPI || isConnector), store.settings.localAPIReadOnly, request.method != "GET" {
             return .json(status: 403, object: ["error": "Read-Only Mode is enabled."])
         }
-        if isConnector, !store.settings.browserExtensionEnabled {
+        if isConnector, path != "/connector/status", !store.settings.browserExtensionEnabled {
             return .json(status: 403, object: ["error": "Browser Extension is disabled."])
         }
 
@@ -174,14 +174,17 @@ final class LocalAPIServer: ObservableObject {
     }
 
     private func metadataResponse(request: HTTPRequest) async -> HTTPResponse {
-        guard let doi = request.query["doi"]?.trimmed, !doi.isEmpty else {
-            return .json(status: 400, object: ["error": "A DOI query parameter is required."])
-        }
         do {
-            let metadata = try await CrossrefClient.fetch(doi: doi)
+            let metadata = try await MetadataLookupClient.lookup(
+                doi: request.query["doi"],
+                arxivID: request.query["arxivId"] ?? request.query["arxiv_id"],
+                isbn: request.query["isbn"],
+                title: request.query["title"]
+            )
             return .json(object: metadataPayload(metadata))
         } catch {
-            return .json(status: 404, object: ["error": error.localizedDescription])
+            let status = error.localizedDescription.hasPrefix("Provide at least one") ? 400 : 404
+            return .json(status: status, object: ["error": error.localizedDescription])
         }
     }
 
@@ -189,7 +192,12 @@ final class LocalAPIServer: ObservableObject {
         do {
             let payload = try JSONDecoder().decode(CreatePaperPayload.self, from: request.body)
             var paper = payload.paper
-            if payload.enrich == true, !paper.doi.trimmed.isEmpty, let metadata = try? await CrossrefClient.fetch(doi: paper.doi) {
+            if payload.enrich == true, let metadata = try? await MetadataLookupClient.lookup(
+                doi: paper.doi,
+                arxivID: paper.eprint,
+                isbn: paper.isbn,
+                title: paper.title
+            ) {
                 paper = metadata.merged(into: paper)
             }
 
@@ -211,7 +219,8 @@ final class LocalAPIServer: ObservableObject {
                     "existingPaperID": duplicateID.uuidString,
                     "existingTitle": existing?.displayTitle ?? "",
                     "conflictField": paper.doi.isEmpty ? "title" : "doi",
-                    "paperManagerURL": "papermanager://paper/\(duplicateID.uuidString)"
+                    "paperManagerURL": "papermanager://paper/\(duplicateID.uuidString)",
+                    "latticeURL": "papermanager://paper/\(duplicateID.uuidString)"
                 ])
             }
 
@@ -225,7 +234,9 @@ final class LocalAPIServer: ObservableObject {
                 "doi": saved.doi,
                 "pdfAttached": saved.hasPDF,
                 "enrichmentStatus": payload.enrich == true ? "attempted" : "none",
-                "warnings": []
+                "warnings": [],
+                "paperManagerURL": "papermanager://paper/\(id.uuidString)",
+                "latticeURL": "papermanager://paper/\(id.uuidString)"
             ])
         } catch {
             return .json(status: 400, object: ["error": error.localizedDescription])
@@ -296,11 +307,13 @@ final class LocalAPIServer: ObservableObject {
 
     private func collectionsPayload(store: LibraryStore) -> [[String: Any]] {
         store.collections.map { collection in
-            [
+            let path = store.collections.path(for: collection.id)
+            return [
                 "id": collection.id.uuidString,
                 "name": collection.name,
                 "parentID": collection.parentID?.uuidString as Any,
-                "path": store.collections.path(for: collection.id)
+                "path": path,
+                "depth": max(path.split(separator: "/").count - 1, 0)
             ]
         }
     }
@@ -310,7 +323,8 @@ final class LocalAPIServer: ObservableObject {
             [
                 "id": tag.id.uuidString,
                 "name": tag.name,
-                "color": tag.colorHex
+                "color": tag.colorHex,
+                "colorHex": tag.colorHex
             ]
         }
     }
@@ -329,29 +343,59 @@ final class LocalAPIServer: ObservableObject {
             "doi": paper.doi,
             "url": paper.url,
             "pdfAttached": paper.hasPDF,
-            "paperManagerURL": "papermanager://paper/\(paper.id.uuidString)"
+            "paperManagerURL": "papermanager://paper/\(paper.id.uuidString)",
+            "latticeURL": "papermanager://paper/\(paper.id.uuidString)"
         ]
     }
 
     private func detailPayload(paper: Paper, store: LibraryStore) -> [String: Any] {
         var payload = lightweightPaperPayload(paper)
         payload["type"] = paper.paperType.rawValue
+        payload["paperType"] = paper.paperType.rawValue
+        payload["subtitle"] = paper.subtitle ?? ""
+        payload["editors"] = paper.editors ?? []
+        payload["translators"] = paper.translators ?? []
         payload["abstract"] = paper.abstract
         payload["notes"] = paper.notes
+        payload["rating"] = paper.rating
+        payload["dateAdded"] = paper.dateAdded
         payload["csl"] = metadataPayload(PaperMetadata(
             title: paper.title,
+            subtitle: paper.subtitle ?? "",
             authors: paper.authors,
+            editors: paper.editors ?? [],
+            translators: paper.translators ?? [],
             year: paper.year,
             paperType: paper.paperType,
             journal: paper.journal,
+            bookTitle: paper.bookTitle,
             publisher: paper.publisher,
+            address: paper.address ?? "",
             volume: paper.volume,
             issue: paper.issue,
             pages: paper.pages,
             doi: paper.doi,
             isbn: paper.isbn,
             url: paper.url,
-            abstract: paper.abstract
+            urlDate: paper.urlDate ?? "",
+            abstract: paper.abstract,
+            edition: paper.edition,
+            series: paper.series,
+            chapter: paper.chapter,
+            institution: paper.institution,
+            school: paper.school,
+            type: paper.type ?? "",
+            howPublished: paper.howPublished,
+            organization: paper.organization ?? "",
+            language: paper.language,
+            month: paper.month,
+            eprint: paper.eprint,
+            eprintType: paper.eprintType,
+            eprintClass: paper.eprintClass,
+            publicationState: paper.publicationState,
+            eventTitle: paper.event,
+            eventDate: paper.eventDate,
+            venue: paper.venue
         ))
         payload["collections"] = paper.collectionIDs.map { store.collections.path(for: $0) }
         payload["tags"] = paper.tagIDs.compactMap { id in store.tags.first(where: { $0.id == id })?.name }
@@ -361,9 +405,14 @@ final class LocalAPIServer: ObservableObject {
     private func metadataPayload(_ metadata: PaperMetadata) -> [String: Any] {
         [
             "title": metadata.title,
+            "subtitle": metadata.subtitle,
             "authors": metadata.authors,
+            "editors": metadata.editors,
+            "translators": metadata.translators,
             "year": metadata.year as Any,
             "journal": metadata.journal,
+            "bookTitle": metadata.bookTitle,
+            "booktitle": metadata.bookTitle,
             "abstract": metadata.abstract,
             "doi": metadata.doi,
             "volume": metadata.volume,
@@ -371,18 +420,42 @@ final class LocalAPIServer: ObservableObject {
             "pages": metadata.pages,
             "isbn": metadata.isbn,
             "url": metadata.url,
+            "urlDate": metadata.urlDate,
             "paperType": metadata.paperType.rawValue,
             "type": metadata.paperType.rawValue,
-            "publisher": metadata.publisher
+            "bibtexType": metadata.type,
+            "publisher": metadata.publisher,
+            "address": metadata.address,
+            "edition": metadata.edition,
+            "series": metadata.series,
+            "chapter": metadata.chapter,
+            "institution": metadata.institution,
+            "school": metadata.school,
+            "howpublished": metadata.howPublished,
+            "organization": metadata.organization,
+            "language": metadata.language,
+            "month": metadata.month,
+            "eprint": metadata.eprint,
+            "eprintType": metadata.eprintType,
+            "eprintClass": metadata.eprintClass,
+            "pubState": metadata.publicationState,
+            "eventTitle": metadata.eventTitle,
+            "eventDate": metadata.eventDate,
+            "venue": metadata.venue
         ]
     }
 }
 
 private struct CreatePaperPayload: Decodable {
     var title: String
+    var subtitle: String?
     var authors: String?
+    var editors: String?
+    var translators: String?
     var year: Int?
     var journal: String?
+    var bookTitle: String?
+    var booktitle: String?
     var abstract: String?
     var doi: String?
     var volume: String?
@@ -390,7 +463,31 @@ private struct CreatePaperPayload: Decodable {
     var pages: String?
     var isbn: String?
     var url: String?
+    var urlDate: String?
     var paperType: String?
+    var publisher: String?
+    var address: String?
+    var edition: String?
+    var series: String?
+    var chapter: String?
+    var institution: String?
+    var school: String?
+    var type: String?
+    var howpublished: String?
+    var howPublished: String?
+    var organization: String?
+    var language: String?
+    var month: String?
+    var eprint: String?
+    var eprintType: String?
+    var eprintClass: String?
+    var pubState: String?
+    var publicationState: String?
+    var eventTitle: String?
+    var event: String?
+    var eventDate: String?
+    var venue: String?
+    var notes: String?
     var collections: [String]?
     var tags: [String]?
     var enrich: Bool?
@@ -399,9 +496,13 @@ private struct CreatePaperPayload: Decodable {
     var paper: Paper {
         var paper = Paper()
         paper.title = title
+        paper.subtitle = subtitle?.nilIfBlank
         paper.authorsText = authors ?? ""
+        paper.editorsText = editors ?? ""
+        paper.translatorsText = translators ?? ""
         paper.year = year
         paper.journal = journal ?? ""
+        paper.bookTitle = bookTitle ?? booktitle ?? ""
         paper.abstract = abstract ?? ""
         paper.doi = doi ?? ""
         paper.volume = volume ?? ""
@@ -409,8 +510,29 @@ private struct CreatePaperPayload: Decodable {
         paper.pages = pages ?? ""
         paper.isbn = isbn ?? ""
         paper.url = url ?? ""
-        if let paperType, let type = PaperType(rawValue: paperType) {
-            paper.paperType = type
+        paper.urlDate = urlDate?.nilIfBlank
+        paper.publisher = publisher ?? ""
+        paper.address = address?.nilIfBlank
+        paper.edition = edition ?? ""
+        paper.series = series ?? ""
+        paper.chapter = chapter ?? ""
+        paper.institution = institution ?? ""
+        paper.school = school ?? ""
+        paper.type = type?.nilIfBlank
+        paper.howPublished = howPublished ?? howpublished ?? ""
+        paper.organization = organization?.nilIfBlank
+        paper.language = language ?? ""
+        paper.month = month ?? ""
+        paper.eprint = eprint ?? ""
+        paper.eprintType = eprintType ?? ""
+        paper.eprintClass = eprintClass ?? ""
+        paper.publicationState = publicationState ?? pubState ?? ""
+        paper.event = eventTitle ?? event ?? ""
+        paper.eventDate = eventDate ?? ""
+        paper.venue = venue ?? ""
+        paper.notes = notes ?? ""
+        if let paperType {
+            paper.paperType = PaperType(rawValue: paperType) ?? PaperType.fromBibTeX(paperType)
         }
         return paper
     }

@@ -6,111 +6,52 @@ struct SettingsView: View {
     @State private var selectedPane: SettingsPane = .general
 
     var body: some View {
-        HStack(spacing: 0) {
-            settingsSidebar
-                .frame(width: 210)
+        TabView(selection: $selectedPane) {
+            general
+                .tabItem { Label(SettingsPane.general.title, systemImage: SettingsPane.general.systemImage) }
+                .tag(SettingsPane.general)
 
-            Rectangle()
-                .fill(LatticeStyle.separator)
-                .frame(width: 0.6)
+            citation
+                .tabItem { Label(SettingsPane.citation.title, systemImage: SettingsPane.citation.systemImage) }
+                .tag(SettingsPane.citation)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    Text("PaperManager 设置")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .padding(.top, 22)
+            localAPISettings
+                .tabItem { Label(SettingsPane.localAPI.title, systemImage: SettingsPane.localAPI.systemImage) }
+                .tag(SettingsPane.localAPI)
 
-                    selectedContent
-                }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 28)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .background(LatticeStyle.contentBackground)
+            backup
+                .tabItem { Label(SettingsPane.backup.title, systemImage: SettingsPane.backup.systemImage) }
+                .tag(SettingsPane.backup)
+
+            templates
+                .tabItem { Label(SettingsPane.templates.title, systemImage: SettingsPane.templates.systemImage) }
+                .tag(SettingsPane.templates)
         }
-        .background(LatticeStyle.sidebarBackground)
+        .padding()
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
     }
 
-    private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Spacer()
-                .frame(height: 36)
-
-            ForEach(SettingsPane.allCases) { pane in
-                Button {
-                    selectedPane = pane
-                } label: {
-                    HStack(spacing: 11) {
-                        Image(systemName: pane.systemImage)
-                            .font(.system(size: 17, weight: .medium))
-                            .frame(width: 22)
-                        Text(pane.title)
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                        Spacer()
-                    }
-                    .foregroundStyle(selectedPane == pane ? Color.accentColor : Color.primary)
-                    .padding(.horizontal, 16)
-                    .frame(height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(selectedPane == pane ? LatticeStyle.selectedFill : Color.clear)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .background(LatticeStyle.sidebarBackground)
-    }
-
-    @ViewBuilder
-    private var selectedContent: some View {
-        switch selectedPane {
-        case .general:
-            general
-        case .citation:
-            citation
-        case .localAPI:
-            localAPISettings
-        case .backup:
-            backup
-        case .templates:
-            templates
-        }
-    }
-
     private var general: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            LatticeSection("界面") {
-                LatticeSettingsRow("语言") {
-                    Picker("", selection: binding(\.languageIdentifier)) {
-                        Text("跟随系统").tag("system")
-                        Text("简体中文").tag("zh-Hans")
-                        Text("English").tag("en")
-                    }
-                    .labelsHidden()
-                    .frame(width: 160)
+        Form {
+            Section("界面") {
+                Picker("语言", selection: binding(\.languageIdentifier)) {
+                    Text("跟随系统").tag("system")
+                    Text("简体中文").tag("zh-Hans")
+                    Text("English").tag("en")
                 }
-                LatticeDivider()
-                LatticeSettingsRow("外观") {
-                    Picker("", selection: binding(\.appearance)) {
-                        ForEach(AppearanceChoice.allCases) { choice in
-                            Text(choice.label).tag(choice)
-                        }
+
+                Picker("外观", selection: binding(\.appearance)) {
+                    ForEach(AppearanceChoice.allCases) { choice in
+                        Text(choice.label).tag(choice)
                     }
-                    .labelsHidden()
-                    .frame(width: 160)
                 }
             }
 
-            LatticeSection("阅读器") {
-                LatticeSettingsRow("默认 PDF 阅读器", subtitle: selectedReaderName) {
+            Section("阅读器") {
+                LabeledContent("默认 PDF 阅读器") {
                     HStack {
+                        Text(selectedReaderName)
+                            .foregroundStyle(.secondary)
                         Button("选择") {
                             if let app = DialogService.chooseApplication(title: "选择默认 PDF 阅读器") {
                                 store.updateSetting(\.defaultPDFReaderPath, value: app.path)
@@ -124,29 +65,24 @@ struct SettingsView: View {
                 }
             }
 
-            LatticeSection("PDF 整理") {
-                LatticeSettingsRow("操作") {
-                    Picker("", selection: binding(\.pdfOrganizationMode)) {
-                        ForEach(PDFOrganizationMode.allCases) { mode in
-                            Text(mode.label).tag(mode)
-                        }
+            Section("PDF 整理") {
+                Picker("操作", selection: binding(\.pdfOrganizationMode)) {
+                    ForEach(PDFOrganizationMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
                     }
-                    .labelsHidden()
-                    .frame(width: 180)
                 }
-                LatticeDivider()
-                LatticeSettingsRow("子文件夹分组") {
-                    Picker("", selection: binding(\.pdfSubfolderGrouping)) {
-                        ForEach(PDFSubfolderGrouping.allCases) { grouping in
-                            Text(grouping.label).tag(grouping)
-                        }
+
+                Picker("子文件夹分组", selection: binding(\.pdfSubfolderGrouping)) {
+                    ForEach(PDFSubfolderGrouping.allCases) { grouping in
+                        Text(grouping.label).tag(grouping)
                     }
-                    .labelsHidden()
-                    .frame(width: 180)
                 }
-                LatticeDivider()
-                LatticeSettingsRow("位置", subtitle: store.settings.pdfOrganizationFolder.nilIfBlank ?? "未选择文件夹") {
+
+                LabeledContent("位置") {
                     HStack {
+                        Text(store.settings.pdfOrganizationFolder.nilIfBlank ?? "未选择文件夹")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                         Button("选择") {
                             if let folder = DialogService.chooseFolder(title: "选择 PDF 整理文件夹") {
                                 store.updateSetting(\.pdfOrganizationFolder, value: folder.path)
@@ -158,150 +94,103 @@ struct SettingsView: View {
                         .disabled(store.settings.pdfOrganizationFolder.trimmed.isEmpty)
                     }
                 }
-                LatticeDivider()
-                LatticeSettingsRow("移除文献时，将关联文件移到废纸篓") {
-                    Toggle("", isOn: binding(\.deleteAttachmentsToTrash))
-                        .labelsHidden()
-                }
-                LatticeDivider()
-                LatticeSettingsRow("自动重命名 PDF") {
-                    Toggle("", isOn: binding(\.autoRenamePDFs))
-                        .labelsHidden()
-                }
-                LatticeDivider()
-                LatticeSettingsRow("格式") {
-                    TextField("{{year}} - {{author}} - {{title}}", text: binding(\.pdfRenameTemplate))
-                        .textFieldStyle(.plain)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(width: 290)
-                }
+
+                Toggle("移除文献时，将关联文件移到废纸篓", isOn: binding(\.deleteAttachmentsToTrash))
+                Toggle("自动重命名 PDF", isOn: binding(\.autoRenamePDFs))
+                TextField("格式", text: binding(\.pdfRenameTemplate))
+                    .font(.system(.body, design: .monospaced))
                 Text("示例：1905 - Einstein - On the Electrodynamics of Moving Bodies.pdf")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
+                    .foregroundStyle(.secondary)
             }
         }
     }
 
     private var citation: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            LatticeSection("Citekey") {
-                LatticeSettingsRow("格式") {
-                    TextField("{{authorLower}}{{year}}{{titleWord}}", text: binding(\.citekeyFormat))
-                        .textFieldStyle(.plain)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(width: 300)
-                }
-                LatticeDivider()
-                LatticeSettingsRow("预览") {
+        Form {
+            Section("Citekey") {
+                TextField("格式", text: binding(\.citekeyFormat))
+                    .font(.system(.body, design: .monospaced))
+
+                LabeledContent("预览") {
                     Text(CitekeyGenerator.render(format: store.settings.citekeyFormat, paper: samplePaper))
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
-                LatticeDivider()
-                LatticeSettingsRow("重新生成") {
-                    Button("应用到全部文献") {
-                        store.regenerateCitekeys()
-                    }
+
+                Button("应用到全部文献") {
+                    store.regenerateCitekeys()
                 }
             }
 
-            Text("可用变量：{{author}}, {{authorLower}}, {{authorInitial}}, {{year}}, {{year2}}, {{title}}, {{titleWord}}, {{journal}}, {{doi}}。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Section {
+                Text("可用变量：{{author}}, {{authorLower}}, {{authorInitial}}, {{year}}, {{year2}}, {{title}}, {{titleWord}}, {{journal}}, {{doi}}。模板导出还可使用 subtitle、editors、translators、booktitle、urlDate、eprint 等字段。")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private var templates: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("模板正文")
-                        .font(.headline)
-                    Spacer()
-                    Button {
-                        store.updateSetting(\.metadataTemplate, value: AppSettings.defaultMetadataTemplate)
-                    } label: {
-                        Label("恢复", systemImage: "arrow.counterclockwise")
-                    }
+        Form {
+            Section("模板正文") {
+                Button {
+                    store.updateSetting(\.metadataTemplate, value: AppSettings.defaultMetadataTemplate)
+                } label: {
+                    Label("恢复默认模板", systemImage: "arrow.counterclockwise")
                 }
-                LatticeCard {
-                    TextEditor(text: binding(\.metadataTemplate))
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 240)
-                        .scrollContentBackground(.hidden)
-                        .padding(14)
-                }
+
+                TextEditor(text: binding(\.metadataTemplate))
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 240)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("标注正文")
-                        .font(.headline)
-                    Spacer()
-                    Button {
-                        store.updateSetting(\.annotationTemplate, value: AppSettings.defaultAnnotationTemplate)
-                    } label: {
-                        Label("恢复", systemImage: "arrow.counterclockwise")
-                    }
+            Section("标注正文") {
+                Button {
+                    store.updateSetting(\.annotationTemplate, value: AppSettings.defaultAnnotationTemplate)
+                } label: {
+                    Label("恢复默认模板", systemImage: "arrow.counterclockwise")
                 }
-                LatticeCard {
-                    TextEditor(text: binding(\.annotationTemplate))
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 120)
-                        .scrollContentBackground(.hidden)
-                        .padding(14)
-                }
+
+                TextEditor(text: binding(\.annotationTemplate))
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 120)
             }
         }
     }
 
     private var localAPISettings: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            LatticeSection("服务") {
-                LatticeSettingsRow("启用") {
-                    Toggle("", isOn: binding(\.localAPIEnabled))
-                        .labelsHidden()
-                }
-                LatticeDivider()
-                LatticeSettingsRow("只读模式") {
-                    Toggle("", isOn: binding(\.localAPIReadOnly))
-                        .labelsHidden()
-                }
-                LatticeDivider()
-                LatticeSettingsRow("浏览器扩展") {
-                    Toggle("", isOn: binding(\.browserExtensionEnabled))
-                        .labelsHidden()
-                }
-                LatticeDivider()
-                LatticeSettingsRow("端口") {
-                    TextField("29467", text: Binding(
-                        get: { String(store.settings.localAPIPort) },
-                        set: { store.updateSetting(\.localAPIPort, value: Int($0.trimmed) ?? 29467) }
-                    ))
-                    .textFieldStyle(.plain)
-                    .frame(width: 80)
-                    .multilineTextAlignment(.trailing)
-                }
-                LatticeDivider()
-                LatticeSettingsRow("浏览器上传文件夹", subtitle: store.settings.browserUploadFolder.nilIfBlank ?? "未选择文件夹") {
-                    Button("选择") {
-                        if let folder = DialogService.chooseFolder(title: "选择浏览器 PDF 上传文件夹") {
-                            store.updateSetting(\.browserUploadFolder, value: folder.path)
+        Form {
+            Section("服务") {
+                Toggle("启用", isOn: binding(\.localAPIEnabled))
+                Toggle("只读模式", isOn: binding(\.localAPIReadOnly))
+                Toggle("浏览器扩展", isOn: binding(\.browserExtensionEnabled))
+                TextField("端口", text: Binding(
+                    get: { String(store.settings.localAPIPort) },
+                    set: { store.updateSetting(\.localAPIPort, value: Int($0.trimmed) ?? 29467) }
+                ))
+
+                LabeledContent("浏览器上传文件夹") {
+                    HStack {
+                        Text(store.settings.browserUploadFolder.nilIfBlank ?? "未选择文件夹")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Button("选择") {
+                            if let folder = DialogService.chooseFolder(title: "选择浏览器 PDF 上传文件夹") {
+                                store.updateSetting(\.browserUploadFolder, value: folder.path)
+                            }
                         }
                     }
                 }
             }
 
-            LatticeSection("连接信息") {
-                LatticeSettingsRow("Base URL") {
+            Section("连接信息") {
+                LabeledContent("Base URL") {
                     Text("http://127.0.0.1:\(store.settings.localAPIPort)")
-                        .textSelection(.enabled)
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
-                LatticeDivider()
-                LatticeSettingsRow("状态") {
+
+                LabeledContent("状态") {
                     Text(localAPI.statusText)
                         .foregroundStyle(localAPI.isRunning ? .green : .secondary)
                 }
@@ -310,50 +199,39 @@ struct SettingsView: View {
     }
 
     private var backup: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            LatticeSection("备份与恢复") {
-                LatticeSettingsRow("备份当前文库") {
-                    Button {
-                        createBackup()
-                    } label: {
-                        Label("备份", systemImage: "archivebox")
-                    }
+        Form {
+            Section("备份与恢复") {
+                Button {
+                    createBackup()
+                } label: {
+                    Label("备份当前文库", systemImage: "archivebox")
                 }
-                LatticeDivider()
-                LatticeSettingsRow("恢复文库") {
-                    Button {
-                        restoreBackup()
-                    } label: {
-                        Label("恢复", systemImage: "arrow.counterclockwise")
-                    }
+
+                Button {
+                    restoreBackup()
+                } label: {
+                    Label("恢复文库", systemImage: "arrow.counterclockwise")
                 }
             }
 
-            LatticeSection("当前文库") {
+            Section("当前文库") {
                 metricRow("文献", value: "\(store.snapshot.papers.count)")
-                LatticeDivider()
                 metricRow("文集", value: "\(store.snapshot.collections.count)")
-                LatticeDivider()
                 metricRow("标签", value: "\(store.snapshot.tags.count)")
-                LatticeDivider()
                 metricRow("附件文件", value: "\(store.snapshot.papers.flatMap(\.attachments).count)")
-                LatticeDivider()
-                LatticeSettingsRow("文库文件") {
+                LabeledContent("文库文件") {
                     Text(store.persistenceURL.path)
-                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .lineLimit(2)
-                        .frame(maxWidth: 360, alignment: .trailing)
                 }
             }
         }
     }
 
     private func metricRow(_ title: String, value: String) -> some View {
-        LatticeSettingsRow(title) {
+        LabeledContent(title) {
             Text(value)
-                .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
         }
     }
@@ -412,7 +290,7 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsPane: String, CaseIterable, Identifiable {
+private enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     case general
     case citation
     case localAPI
