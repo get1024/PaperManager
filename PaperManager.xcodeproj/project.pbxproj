@@ -1,0 +1,435 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AB0000000000000000000001 /* PaperManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000001 /* PaperManagerApp.swift */; };
+		AB0000000000000000000002 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000002 /* AppSettings.swift */; };
+		AB0000000000000000000003 /* LibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000003 /* LibraryModels.swift */; };
+		AB0000000000000000000004 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000004 /* BackupService.swift */; };
+		AB0000000000000000000005 /* BibTeXParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000005 /* BibTeXParser.swift */; };
+		AB0000000000000000000006 /* CitekeyGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000006 /* CitekeyGenerator.swift */; };
+		AB0000000000000000000007 /* CrossrefClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000007 /* CrossrefClient.swift */; };
+		AB0000000000000000000008 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000008 /* ExportService.swift */; };
+		AB0000000000000000000009 /* ImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000009 /* ImportService.swift */; };
+		AB000000000000000000000A /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000000A /* LibraryStore.swift */; };
+		AB000000000000000000000B /* LocalAPIServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000000B /* LocalAPIServer.swift */; };
+		AB000000000000000000000C /* PDFMetadataExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000000C /* PDFMetadataExtractor.swift */; };
+		AB000000000000000000000D /* RISParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000000D /* RISParser.swift */; };
+		AB000000000000000000000E /* TemplateRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000000E /* TemplateRenderer.swift */; };
+		AB000000000000000000000F /* Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000000F /* Utilities.swift */; };
+		AB0000000000000000000010 /* AddPaperSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000010 /* AddPaperSheets.swift */; };
+		AB0000000000000000000011 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000011 /* ContentView.swift */; };
+		AB0000000000000000000012 /* PaperDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000012 /* PaperDetailView.swift */; };
+		AB0000000000000000000013 /* PaperListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000013 /* PaperListView.swift */; };
+		AB0000000000000000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000014 /* SettingsView.swift */; };
+		AB0000000000000000000015 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000015 /* SidebarView.swift */; };
+		AB0000000000000000000016 /* ViewUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000016 /* ViewUtilities.swift */; };
+		AB0000000000000000000017 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000017 /* PrivacyInfo.xcprivacy */; };
+		AB0000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001A /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AF0000000000000000000001 /* PaperManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperManagerApp.swift; sourceTree = "<group>"; };
+		AF0000000000000000000002 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		AF0000000000000000000003 /* LibraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModels.swift; sourceTree = "<group>"; };
+		AF0000000000000000000004 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
+		AF0000000000000000000005 /* BibTeXParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BibTeXParser.swift; sourceTree = "<group>"; };
+		AF0000000000000000000006 /* CitekeyGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CitekeyGenerator.swift; sourceTree = "<group>"; };
+		AF0000000000000000000007 /* CrossrefClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossrefClient.swift; sourceTree = "<group>"; };
+		AF0000000000000000000008 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
+		AF0000000000000000000009 /* ImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportService.swift; sourceTree = "<group>"; };
+		AF000000000000000000000A /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
+		AF000000000000000000000B /* LocalAPIServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAPIServer.swift; sourceTree = "<group>"; };
+		AF000000000000000000000C /* PDFMetadataExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFMetadataExtractor.swift; sourceTree = "<group>"; };
+		AF000000000000000000000D /* RISParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RISParser.swift; sourceTree = "<group>"; };
+		AF000000000000000000000E /* TemplateRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplateRenderer.swift; sourceTree = "<group>"; };
+		AF000000000000000000000F /* Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utilities.swift; sourceTree = "<group>"; };
+		AF0000000000000000000010 /* AddPaperSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPaperSheets.swift; sourceTree = "<group>"; };
+		AF0000000000000000000011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AF0000000000000000000012 /* PaperDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperDetailView.swift; sourceTree = "<group>"; };
+		AF0000000000000000000013 /* PaperListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperListView.swift; sourceTree = "<group>"; };
+		AF0000000000000000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		AF0000000000000000000015 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		AF0000000000000000000016 /* ViewUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewUtilities.swift; sourceTree = "<group>"; };
+		AF0000000000000000000017 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AF0000000000000000000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AF0000000000000000000019 /* PaperManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaperManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF000000000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		AG0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				AG0000000000000000000002 /* App */,
+				AG0000000000000000000003 /* Sources */,
+				AG0000000000000000000008 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000002 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				AF0000000000000000000018 /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000003 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AF0000000000000000000001 /* PaperManagerApp.swift */,
+				AG0000000000000000000004 /* Models */,
+				AG0000000000000000000005 /* Services */,
+				AG0000000000000000000006 /* Views */,
+				AG0000000000000000000007 /* Resources */,
+			);
+			path = Sources/PaperManager;
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AF0000000000000000000002 /* AppSettings.swift */,
+				AF0000000000000000000003 /* LibraryModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				AF0000000000000000000004 /* BackupService.swift */,
+				AF0000000000000000000005 /* BibTeXParser.swift */,
+				AF0000000000000000000006 /* CitekeyGenerator.swift */,
+				AF0000000000000000000007 /* CrossrefClient.swift */,
+				AF0000000000000000000008 /* ExportService.swift */,
+				AF0000000000000000000009 /* ImportService.swift */,
+				AF000000000000000000000A /* LibraryStore.swift */,
+				AF000000000000000000000B /* LocalAPIServer.swift */,
+				AF000000000000000000000C /* PDFMetadataExtractor.swift */,
+				AF000000000000000000000D /* RISParser.swift */,
+				AF000000000000000000000E /* TemplateRenderer.swift */,
+				AF000000000000000000000F /* Utilities.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000006 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AF0000000000000000000010 /* AddPaperSheets.swift */,
+				AF0000000000000000000011 /* ContentView.swift */,
+				AF0000000000000000000012 /* PaperDetailView.swift */,
+				AF0000000000000000000013 /* PaperListView.swift */,
+				AF0000000000000000000014 /* SettingsView.swift */,
+				AF0000000000000000000015 /* SidebarView.swift */,
+				AF0000000000000000000016 /* ViewUtilities.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000007 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AF000000000000000000001A /* Assets.xcassets */,
+				AF0000000000000000000017 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		AG0000000000000000000008 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AF0000000000000000000019 /* PaperManager.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000001 /* PaperManager */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AC0000000000000000000002 /* Build configuration list for PBXNativeTarget "PaperManager" */;
+			buildPhases = (
+				AS0000000000000000000001 /* Sources */,
+				AR0000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PaperManager;
+			productName = PaperManager;
+			productReference = AF0000000000000000000019 /* PaperManager.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AP0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					AA0000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = AC0000000000000000000001 /* Build configuration list for PBXProject "PaperManager" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AG0000000000000000000001;
+			productRefGroup = AG0000000000000000000008 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000001 /* PaperManager */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AR0000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB0000000000000000000017 /* PrivacyInfo.xcprivacy in Resources */,
+				AB0000000000000000000018 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AS0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB0000000000000000000001 /* PaperManagerApp.swift in Sources */,
+				AB0000000000000000000002 /* AppSettings.swift in Sources */,
+				AB0000000000000000000003 /* LibraryModels.swift in Sources */,
+				AB0000000000000000000004 /* BackupService.swift in Sources */,
+				AB0000000000000000000005 /* BibTeXParser.swift in Sources */,
+				AB0000000000000000000006 /* CitekeyGenerator.swift in Sources */,
+				AB0000000000000000000007 /* CrossrefClient.swift in Sources */,
+				AB0000000000000000000008 /* ExportService.swift in Sources */,
+				AB0000000000000000000009 /* ImportService.swift in Sources */,
+				AB000000000000000000000A /* LibraryStore.swift in Sources */,
+				AB000000000000000000000B /* LocalAPIServer.swift in Sources */,
+				AB000000000000000000000C /* PDFMetadataExtractor.swift in Sources */,
+				AB000000000000000000000D /* RISParser.swift in Sources */,
+				AB000000000000000000000E /* TemplateRenderer.swift in Sources */,
+				AB000000000000000000000F /* Utilities.swift in Sources */,
+				AB0000000000000000000010 /* AddPaperSheets.swift in Sources */,
+				AB0000000000000000000011 /* ContentView.swift in Sources */,
+				AB0000000000000000000012 /* PaperDetailView.swift in Sources */,
+				AB0000000000000000000013 /* PaperListView.swift in Sources */,
+				AB0000000000000000000014 /* SettingsView.swift in Sources */,
+				AB0000000000000000000015 /* SidebarView.swift in Sources */,
+				AB0000000000000000000016 /* ViewUtilities.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AC0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AC0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		AC0000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aurelian.PaperManager;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AC0000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aurelian.PaperManager;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AC0000000000000000000001 /* Build configuration list for PBXProject "PaperManager" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC0000000000000000000003 /* Debug */,
+				AC0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AC0000000000000000000002 /* Build configuration list for PBXNativeTarget "PaperManager" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC0000000000000000000005 /* Debug */,
+				AC0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AP0000000000000000000001 /* Project object */;
+}
