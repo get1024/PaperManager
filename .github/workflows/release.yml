@@ -162,7 +162,7 @@ jobs:
           echo "sha_path=$DIST_DIR/$INSTALLER_NAME.sha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ steps.vars.outputs.installer_name }}
           path: |
