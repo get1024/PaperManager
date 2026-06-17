@@ -10,16 +10,10 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             settingsSidebar
 
-            Divider()
-
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 0) {
-                    Text("PaperManager")
-                        .font(PMTypography.latinFont(size: 22, weight: .bold))
-                    Text(" 设置")
-                        .font(PMTypography.largeTitle)
-                }
-                    .padding(.top, 24)
+                Text("PaperManager 设置")
+                    .font(PMTypography.title)
+                    .padding(.top, 42)
 
                 selectedContent
                     .font(PMTypography.body)
@@ -32,24 +26,39 @@ struct SettingsView: View {
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .font(PMTypography.body)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .background(WindowChromeConfigurator { window in
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.toolbar = nil
+            window.isMovableByWindowBackground = true
+        })
+        .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
     }
 
     private var settingsSidebar: some View {
-        List(selection: $selectedPane) {
-            ForEach(SettingsPane.allCases) { pane in
-                Label(pane.title, systemImage: pane.systemImage)
-                    .font(PMTypography.sidebarRow)
-                    .tag(pane)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsPane.allCases) { pane in
+                    SidebarNavigationRow(
+                        title: pane.title,
+                        systemImage: pane.systemImage,
+                        isSelected: selectedPane == pane
+                    ) {
+                        selectedPane = pane
+                    }
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 70)
+            .padding(.bottom, 18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .safeAreaInset(edge: .top) {
-            Color.clear.frame(height: 46)
-        }
-        .frame(width: 204)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .frame(width: 226)
+        .frame(maxHeight: .infinity)
+        .background(.ultraThinMaterial)
     }
 
     @ViewBuilder

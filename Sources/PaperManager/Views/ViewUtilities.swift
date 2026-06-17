@@ -4,10 +4,10 @@ import UniformTypeIdentifiers
 
 enum PMTypography {
     static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .custom("PingFang SC", size: size).weight(weight)
+        .system(size: size, weight: weight)
     }
 
-    static func latinFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    static func timesFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .custom("Times New Roman", size: size).weight(weight)
     }
 
@@ -22,11 +22,13 @@ enum PMTypography {
     static let sidebarRow = font(size: 14, weight: .semibold)
     static let sidebarCount = font(size: 13, weight: .semibold)
     static let sectionHeader = font(size: 12, weight: .bold)
-    static let paperTitle = latinFont(size: 16, weight: .bold)
-    static let paperBody = latinFont(size: 13, weight: .semibold)
-    static let paperBodyRegular = latinFont(size: 13)
-    static let paperCallout = latinFont(size: 12.5, weight: .semibold)
-    static let paperCaption = latinFont(size: 11.5, weight: .semibold)
+    static let detailTitle = timesFont(size: 16.5, weight: .bold)
+    static let detailAbstract = timesFont(size: 13.25)
+    static let paperTitle = font(size: 16, weight: .bold)
+    static let paperBody = font(size: 13, weight: .semibold)
+    static let paperBodyRegular = font(size: 13)
+    static let paperCallout = font(size: 12.5, weight: .semibold)
+    static let paperCaption = font(size: 11.5, weight: .semibold)
     static let monospacedBody = Font.system(size: 12.5, weight: .regular, design: .monospaced)
     static let monospacedCaption = Font.system(size: 11.5, weight: .regular, design: .monospaced)
 }
@@ -158,6 +160,28 @@ struct PaperManagerEmptyState: View {
             Label(title, systemImage: systemImage)
         } description: {
             Text(message)
+        }
+    }
+}
+
+struct WindowChromeConfigurator: NSViewRepresentable {
+    let configure: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                configure(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let window = nsView.window {
+                configure(window)
+            }
         }
     }
 }

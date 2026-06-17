@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -11,6 +12,11 @@ struct PaperListView: View {
     var onDeleteSelected: () -> Void
     var onImportURLs: ([URL]) -> Void
     var density: TableDensity = .compact
+    @State private var sortOrder = [KeyPathComparator<Paper>]()
+
+    private var displayedPapers: [Paper] {
+        sortOrder.isEmpty ? papers : papers.sorted(using: sortOrder)
+    }
 
     var body: some View {
         Group {
@@ -21,8 +27,8 @@ struct PaperListView: View {
                     message: searchText.isEmpty ? "导入 PDF、BibTeX 文件，或通过 DOI 添加文献。" : "换一个标题、作者、来源、年份或 DOI 试试。"
                 )
             } else {
-                Table(papers, selection: $selection) {
-                    TableColumn("标题") { paper in
+                Table(displayedPapers, selection: $selection, sortOrder: $sortOrder) {
+                    TableColumn("标题", value: \.displayTitle) { paper in
                         PaperTitleCell(paper: paper)
                             .onDrag {
                                 NSItemProvider(object: dragPayload(for: paper) as NSString)
@@ -30,32 +36,32 @@ struct PaperListView: View {
                     }
                     .width(min: 240, ideal: 360)
 
-                    TableColumn("作者") { paper in
+                    TableColumn("作者", value: \.authorsDisplay) { paper in
                         Text(paper.authorsDisplay)
                             .lineLimit(1)
                             .foregroundStyle(paper.authors.isEmpty ? .secondary : .primary)
                     }
                     .width(min: 140, ideal: 220)
 
-                    TableColumn("年份") { paper in
+                    TableColumn("年份", value: \.sortYear) { paper in
                         Text(paper.year.map(String.init) ?? "")
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 52, ideal: 64, max: 80)
 
-                    TableColumn("来源") { paper in
+                    TableColumn("来源", value: \.sourceDisplay) { paper in
                         Text(paper.sourceDisplay)
                             .lineLimit(1)
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 120, ideal: 180)
 
-                    TableColumn("评分") { paper in
+                    TableColumn("评分", value: \.rating) { paper in
                         RatingDisplay(rating: paper.rating)
                     }
                     .width(min: 68, ideal: 80, max: 96)
 
-                    TableColumn("添加日期") { paper in
+                    TableColumn("添加日期", value: \.dateAdded) { paper in
                         Text(Self.dateFormatter.string(from: paper.dateAdded))
                             .foregroundStyle(.secondary)
                     }
@@ -70,6 +76,7 @@ struct PaperListView: View {
                 }
                 .font(PMTypography.paperBodyRegular)
                 .environment(\.defaultMinListRowHeight, density == .compact ? 30 : 40)
+                .background(TableAppearanceConfigurator())
                 .contextMenu {
                     Button("打开 PDF") { onOpenSelected() }
                         .disabled(selection.isEmpty)
@@ -145,6 +152,49 @@ struct PaperListView: View {
             }
         }
         return didFindFileURL
+    }
+}
+
+private struct TableAppearanceConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configureTables(from: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configureTables(from: nsView)
+        }
+    }
+
+    private func configureTables(from view: NSView) {
+        guard let root = view.window?.contentView else { return }
+        for tableView in root.descendants(ofType: NSTableView.self) {
+            tableView.usesAlternatingRowBackgroundColors = false
+            tableView.backgroundColor = .clear
+            tableView.enclosingScrollView?.drawsBackground = false
+        }
+    }
+}
+
+private extension NSView {
+    func descendants<T: NSView>(ofType type: T.Type) -> [T] {
+        subviews.flatMap { subview -> [T] in
+            var matches = subview.descendants(ofType: type)
+            if let typed = subview as? T {
+                matches.insert(typed, at: 0)
+            }
+            return matches
+        }
+    }
+}
+
+private extension Paper {
+    var sortYear: Int {
+        year ?? 0
     }
 }
 

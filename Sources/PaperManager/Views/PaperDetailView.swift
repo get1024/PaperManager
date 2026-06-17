@@ -101,9 +101,6 @@ private struct PaperEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             inspectorTabBar
-                .padding(.top, 12)
-
-            Divider()
 
             Group {
                 if selectedTab == .metadata {
@@ -117,26 +114,35 @@ private struct PaperEditorView: View {
     }
 
     private var inspectorTabBar: some View {
-        HStack(spacing: 42) {
+        HStack(spacing: 0) {
             ForEach([InspectorTab.metadata, InspectorTab.annotations], id: \.self) { tab in
                 Button {
                     selectedTab = tab
                 } label: {
-                    VStack(spacing: 7) {
+                    VStack(spacing: 0) {
                         Text(tab.title)
                             .font(PMTypography.headline)
                             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
                         Rectangle()
                             .fill(selectedTab == tab ? Color.accentColor : Color.clear)
                             .frame(height: 2)
                     }
-                    .frame(width: 84)
+                    .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 52)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor).opacity(0.75))
+                .frame(height: 1)
+        }
     }
 
     private var metadataInspector: some View {
@@ -208,7 +214,7 @@ private struct PaperEditorView: View {
 
                 InspectorSection(title: "内容") {
                     DisclosureGroup("摘要", isExpanded: .constant(true)) {
-                        PlainInspectorTextEditor(text: $paper.abstract, minHeight: 130)
+                        PlainInspectorTextEditor(text: $paper.abstract, minHeight: 130, font: PMTypography.detailAbstract)
                     }
                     DisclosureGroup("备注", isExpanded: .constant(true)) {
                         PlainInspectorTextEditor(text: $paper.notes, minHeight: 86)
@@ -271,7 +277,7 @@ private struct PaperEditorView: View {
     private var paperIdentityHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(paper.displayTitle)
-                .font(PMTypography.paperTitle)
+                .font(PMTypography.detailTitle)
                 .lineLimit(2...4)
                 .textSelection(.enabled)
 
@@ -346,7 +352,7 @@ private struct PaperEditorView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     TextField("标题", text: $paper.title, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(PMTypography.paperTitle)
+                        .font(PMTypography.detailTitle)
                         .lineLimit(2...4)
 
                     TextField("作者", text: Binding(
@@ -1073,10 +1079,11 @@ private struct AnnotationInspectorRow: View {
 private struct PlainInspectorTextEditor: View {
     @Binding var text: String
     let minHeight: CGFloat
+    var font: Font = PMTypography.callout
 
     var body: some View {
         TextEditor(text: $text)
-            .font(PMTypography.callout)
+            .font(font)
             .scrollContentBackground(.hidden)
             .frame(minHeight: minHeight)
             .padding(7)

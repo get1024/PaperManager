@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showDOIAdd = false
     @State private var includeSubcollections = true
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var showInspector = true
     @State private var sortDescriptor = PaperSortDescriptor.defaultValue
     @State private var focusSearchToken = 0
 
@@ -65,10 +66,27 @@ struct ContentView: View {
             )
             .navigationTitle(selectedTitle)
         } detail: {
-            PaperDetailView(selection: $selectedPaperIDs)
-                .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 400)
+            VStack(spacing: 0) {
+                if showInspector {
+                    PaperDetailView(selection: $selectedPaperIDs)
+                } else {
+                    Color.clear
+                }
+            }
+            .navigationSplitViewColumnWidth(
+                min: showInspector ? 300 : 0,
+                ideal: showInspector ? 340 : 0,
+                max: showInspector ? 400 : 0
+            )
         }
         .font(PMTypography.bodyRegular)
+        .background(WindowChromeConfigurator { window in
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.styleMask.insert(.fullSizeContentView)
+            window.isMovableByWindowBackground = true
+        })
+        .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -96,34 +114,13 @@ struct ContentView: View {
                 }
                 .labelStyle(.iconOnly)
 
-                Menu {
-                    ForEach(PaperSortField.allCases) { field in
-                        Button {
-                            if sortDescriptor.field == field {
-                                sortDescriptor.ascending.toggle()
-                            } else {
-                                sortDescriptor = PaperSortDescriptor(field: field, ascending: defaultAscending(for: field))
-                            }
-                        } label: {
-                            if sortDescriptor.field == field {
-                                Label(field.label, systemImage: sortDescriptor.ascending ? "arrow.up" : "arrow.down")
-                            } else {
-                                Text(field.label)
-                            }
-                        }
-                    }
-                } label: {
-                    Label("排序", systemImage: "arrow.up.arrow.down")
-                }
-                .labelStyle(.iconOnly)
-
                 Button {
-                    columnVisibility = columnVisibility == .all ? .doubleColumn : .all
+                    showInspector.toggle()
                 } label: {
-                    Label("切换检查器", systemImage: "sidebar.right")
+                    Label(showInspector ? "隐藏检查器" : "显示检查器", systemImage: "sidebar.right")
                 }
                 .labelStyle(.iconOnly)
-                .help("显示或隐藏检查器")
+                .help(showInspector ? "隐藏检查器" : "显示检查器")
             }
         }
         .fileImporter(
@@ -145,14 +142,14 @@ struct ContentView: View {
         }
         .onAppear {
             localAPI.reconfigure(with: store)
-            columnVisibility = store.settings.showInspectorByDefault ? .all : .doubleColumn
+            showInspector = store.settings.showInspectorByDefault
         }
         .onChange(of: selectedFilter) { _, _ in
             selectedPaperIDs.removeAll()
         }
         .onChange(of: store.settings) { _, _ in
             localAPI.reconfigure(with: store)
-            columnVisibility = store.settings.showInspectorByDefault ? .all : .doubleColumn
+            showInspector = store.settings.showInspectorByDefault
         }
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerImportRequested)) { _ in
             showImporter = true
