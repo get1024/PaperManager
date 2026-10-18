@@ -8,7 +8,7 @@
 - 独立文库启动：`scripts/run-reconstruction.command`。使用 `LocalData/Library/library.json`，不替换原版 Lattice 或已有 PaperManager 文库。
 - 已迁移 72 篇文献、5 个文集、32 个标签、2 条标注、1 个模板和全部 72 个独立 PDF 副本。
 - 完整可移植备份：`LocalData/Backups/PaperManager-72-paper-library.papermanager`。实际恢复到新目录后，数量、关系和全部 PDF 可读性通过验证；原版未修改。
-- 最终 CLT 构建、SwiftPM app/CLI 构建、应用与 Helpers CLI 的严格签名验证通过。完整 Xcode 构建及公证发行未执行。
+- 最终本机 CLT 构建、SwiftPM app/CLI 构建、应用与 Helpers CLI 的严格签名验证通过。完整 Xcode 构建随后由 GitHub Actions 验证通过，见下方 CI 记录；未提供公证发行。
 
 ## 大片空白的修复与证据
 
@@ -49,3 +49,12 @@
 最终应用统一为 `dist/PaperManager.app`；旧应用和原始资料可恢复归档至项目外，测试辅助程序已移出生产源码。共用工具链、统一测试入口及目录说明见 [开发说明](../../docs/DEVELOPMENT.md) 与 [本地目录说明](../../docs/LOCAL_LAYOUT.md)。本机数据未提交到远程仓库。
 
 清理后的源码重新通过：十组核心服务回归、连接器 12 项、原生表格 8 组、WindowGroup 9 阶段、设置窗口 5 阶段，以及 app/CLI 打包、严格签名验证、SwiftPM 构建和 Xcode 工程成员检查。连接器最初因 Node 不在 PATH 未运行，补充标准 NVM/Homebrew 路径查找后已单独重跑通过。两个迁移工具的编译和 `--help` 入口通过。测试结果在当前 `.build/test-results/`，旧证据按本地归档映射保留。
+
+## 远程 CI 验证
+
+源码提交 `f03f4bc64658cc1f64bac5366bf0211279daac58` 已推送到 `main`。[GitHub Actions 39119693256](https://github.com/get1024/PaperManager/actions/runs/39119693256) 的两个 job 全部成功：
+
+- Xcode 生产源/资源成员检查与全部核心回归。
+- SwiftPM 编译、完整 Xcode Release app/CLI 构建、临时签名验证、DMG 打包与构建产物上传。
+
+这补充了此前本机只有 CLT 时缺少的 Xcode 构建验证。Shortcuts 系统运行注册、Safari 签名发行及完整实屏操作边界仍保持上述说明。此后补充 CI 链接的提交仅修改文档，未改变已验证源码。
