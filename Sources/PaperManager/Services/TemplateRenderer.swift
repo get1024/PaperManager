@@ -5,7 +5,8 @@ enum TemplateRenderer {
         paper: Paper,
         snapshot: LibrarySnapshot,
         includeAnnotations: Bool = true,
-        annotationImagePath: (ResearchAnnotation) -> String = { $0.imageFilePath ?? "" }
+        annotationImagePath: (ResearchAnnotation) -> String = { $0.imageFilePath ?? "" },
+        templateID: UUID? = nil
     ) -> String {
         var context = context(for: paper, snapshot: snapshot)
         if includeAnnotations {
@@ -17,7 +18,8 @@ enum TemplateRenderer {
         } else {
             context["annotations"] = ""
         }
-        return render(template: snapshot.settings.metadataTemplate, context: context)
+        let body = snapshot.metadataTemplate(withID: templateID)?.content ?? snapshot.selectedMetadataTemplate.content
+        return render(template: body, context: context)
             .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmed
     }
@@ -55,6 +57,9 @@ enum TemplateRenderer {
         var context: [String: String] = [
             "id": paper.id.uuidString,
             "citekey": paper.citekey,
+            "bibtexKey": paper.citekey,
+            "latticeURL": "papermanager://paper/\(paper.id.uuidString)",
+            "pdfURL": paper.primaryPDF?.url.absoluteString ?? "",
             "title": paper.displayTitle,
             "subtitle": paper.subtitle ?? "",
             "authors": paper.authors.joined(separator: "; "),
@@ -62,7 +67,7 @@ enum TemplateRenderer {
             "editors": (paper.editors ?? []).joined(separator: "; "),
             "translators": (paper.translators ?? []).joined(separator: "; "),
             "year": paper.year.map(String.init) ?? "",
-            "type": paper.paperType.label,
+            "type": paper.paperType.rawValue.lowercased(),
             "bibtexType": paper.type ?? paper.paperType.bibTeXType,
             "source": paper.sourceDisplay,
             "journal": paper.journal,
@@ -101,7 +106,7 @@ enum TemplateRenderer {
             "pdf": paper.primaryPDF?.filePath ?? ""
         ]
 
-        for field in paper.customFields {
+        for field in paper.customFields where context[field.key] == nil {
             context[field.key] = field.value
         }
         return context

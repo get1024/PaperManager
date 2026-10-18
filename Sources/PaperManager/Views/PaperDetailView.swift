@@ -9,8 +9,8 @@ private enum InspectorTab {
 
     var title: String {
         switch self {
-        case .metadata: return "元数据"
-        case .annotations: return "标注"
+        case .metadata: return PMLocalization.text("元数据")
+        case .annotations: return PMLocalization.text("标注")
         }
     }
 }
@@ -18,10 +18,7 @@ private enum InspectorTab {
 struct PaperDetailView: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var selection: Set<UUID>
-    @State private var draft = Paper()
-    @State private var loadedID: UUID?
-    @State private var isLoadingDraft = false
-    @State private var saveTask: Task<Void, Never>?
+    @StateObject private var editing = PaperDraftSession()
 
     private var selectedID: UUID? {
         selection.count == 1 ? selection.first : nil
@@ -39,62 +36,270 @@ struct PaperDetailView: View {
                 PaperManagerEmptyState(
                     systemImage: "checklist",
                     title: "已选择多篇文献",
-                    message: "当前选择了 \(selection.count) 篇文献。可从右上角导出或删除。"
+                    message: PMLocalization.format("当前选择了 %lld 篇文献。可从右上角导出或删除。", selection.count)
                 )
-            } else if selectedID != nil {
-                PaperEditorView(paper: $draft)
-                    .onAppear { loadDraftIfNeeded() }
-                    .onChange(of: selectedID) { _, _ in
-                        saveCurrentDraft()
-                        loadDraftIfNeeded(force: true)
-                    }
-                    .onChange(of: draft) { _, newValue in
-                        guard !isLoadingDraft else { return }
-                        scheduleSave(newValue)
-                    }
-                    .onDisappear {
-                        saveCurrentDraft()
-                    }
+            } else if let id = selectedID {
+                PaperEditorView(paper: editing.binding(for: id),
+                                isCurrentPaper: { editing.loadedID == id },
+                                onCommitDraft: { editing.flush() })
+                    .id(id)
             }
         }
-        .navigationTitle("详情")
+        .accessibilityIdentifier("inspector-root")
+        .onAppear { editing.select(selectedID, in: store) }
+        .onChange(of: selectedID) { _, id in editing.select(id, in: store) }
+        .onDisappear { editing.flush() }
+        .onChange(of: selectedID.flatMap { store.paper(with: $0) }) { _, latest in
+            editing.receive(latest)
+        }
+    }
+}
+
+/// Own the draft outside SwiftUI's deferred change callbacks. A binding write is
+/// immediately visible to selection changes and the synchronous quit flush.
+@MainActor
+final class PaperDraftSession: ObservableObject {
+    @Published private(set) var draft = Paper()
+    private(set) var loadedID: UUID?
+    private var baseline = Paper()
+    private var store: LibraryStore?
+    private var saveTask: Task<Void, Never>?
+    private var revision: UInt64 = 0
+    private let autosaveDelay: UInt64
+    private static let sessions = NSHashTable<PaperDraftSession>.weakObjects()
+    // A failed write must survive the owning window disappearing. The session
+    // is released again as soon as all of its drafts have reached disk.
+    private static var failedSessions: [ObjectIdentifier: PaperDraftSession] = [:]
+    private struct DraftKey: Hashable {
+        let store: ObjectIdentifier
+        let paper: UUID
+    }
+    private struct DeferredDraft {
+        let store: LibraryStore
+        let draft: Paper
+        let baseline: Paper
+    }
+    private var deferredDrafts: [DraftKey: DeferredDraft] = [:]
+    private(set) var saveError: String?
+
+    init(autosaveDelayNanoseconds: UInt64 = 450_000_000) {
+        autosaveDelay = autosaveDelayNanoseconds
+        Self.sessions.add(self)
     }
 
-    private func loadDraftIfNeeded(force: Bool = false) {
-        guard let id = selectedID, (force || loadedID != id), let paper = store.paper(with: id) else { return }
-        saveTask?.cancel()
-        isLoadingDraft = true
-        draft = paper
-        loadedID = id
-        DispatchQueue.main.async {
-            isLoadingDraft = false
+    func binding(for id: UUID) -> Binding<Paper> {
+        Binding {
+            self.loadedID == id ? self.draft : (self.store?.paper(with: id) ?? Paper(id: id))
+        } set: { paper in
+            guard self.loadedID == id, paper.id == id else { return }
+            self.edit(paper)
         }
     }
 
-    private func scheduleSave(_ paper: Paper) {
+    func select(_ id: UUID?, in store: LibraryStore) {
+        guard self.store !== store || loadedID != id else {
+            receive(id.flatMap { store.paper(with: $0) })
+            return
+        }
+        if !flush(), let previousStore = self.store, let loadedID,
+           !draft.hasSameEditableContent(as: baseline) {
+            let key = DraftKey(store: ObjectIdentifier(previousStore), paper: loadedID)
+            deferredDrafts[key] = DeferredDraft(store: previousStore, draft: draft, baseline: baseline)
+        }
+        self.store = store
+        let paper = id.flatMap { store.paper(with: $0) }
+        loadedID = paper?.id
+        baseline = paper ?? Paper()
+        if let id, let paper,
+           let pending = deferredDrafts.removeValue(forKey: DraftKey(store: ObjectIdentifier(store), paper: id)) {
+            draft = pending.draft.applyingEdits(to: paper, from: pending.baseline)
+        } else {
+            draft = baseline
+        }
+    }
+
+    func edit(_ paper: Paper) {
+        // A binding from a disappearing editor can still deliver its last write.
         guard loadedID == paper.id else { return }
+        draft = paper
         saveTask?.cancel()
-        saveTask = Task {
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                store.updatePaper(paper)
-            }
+        revision &+= 1
+        let scheduledRevision = revision
+        saveTask = Task { [weak self, autosaveDelay] in
+            do { try await Task.sleep(nanoseconds: autosaveDelay) }
+            catch { return }
+            guard let self, !Task.isCancelled, self.revision == scheduledRevision,
+                  self.loadedID == paper.id else { return }
+            self.flush()
         }
     }
 
-    private func saveCurrentDraft() {
+    func receive(_ latest: Paper?) {
+        guard let latest, latest.id == loadedID else { return }
+        let merged = draft.applyingEdits(to: latest, from: baseline)
+        baseline = latest
+        draft = merged
+    }
+
+    @discardableResult
+    func flush() -> Bool {
         saveTask?.cancel()
-        guard !isLoadingDraft, loadedID == draft.id else { return }
-        store.updatePaper(draft)
+        saveTask = nil
+        revision &+= 1
+        saveError = nil
+        for (key, pending) in Array(deferredDrafts) {
+            do {
+                try persist(pending.draft, baseline: pending.baseline, in: pending.store)
+                deferredDrafts.removeValue(forKey: key)
+            } catch { recordSaveError(error, in: pending.store) }
+        }
+        if loadedID == draft.id, let store {
+            do {
+                if let saved = try persist(draft, baseline: baseline, in: store) {
+                    baseline = saved
+                    draft = saved
+                }
+            } catch { recordSaveError(error, in: store) }
+        }
+        if saveError == nil {
+            Self.failedSessions.removeValue(forKey: ObjectIdentifier(self))
+            return true
+        }
+        Self.failedSessions[ObjectIdentifier(self)] = self
+        return false
+    }
+
+    @discardableResult
+    private func persist(_ paper: Paper, baseline: Paper, in store: LibraryStore) throws -> Paper? {
+        // A record intentionally removed elsewhere is never recreated by a draft.
+        guard let latest = store.paper(with: paper.id) else { return nil }
+        try store.updatePaperDurably(paper.applyingEdits(to: latest, from: baseline))
+        return store.paper(with: paper.id)
+    }
+
+    private func recordSaveError(_ error: Error, in store: LibraryStore) {
+        let message = PMLocalization.format("保存文库失败：%@", error.localizedDescription)
+        saveError = saveError ?? message
+        store.statusMessage = message
+    }
+
+    @discardableResult
+    static func flushAll() -> Bool {
+        let active = sessions.allObjects + Array(failedSessions.values)
+        var visited = Set<ObjectIdentifier>()
+        var succeeded = true
+        for session in active where visited.insert(ObjectIdentifier(session)).inserted {
+            if !session.flush() { succeeded = false }
+        }
+        return succeeded
+    }
+}
+
+struct InspectorMetadataField: Identifiable {
+    let id: String
+    private let titleKey: String
+    var title: String { PMLocalization.text(titleKey) }
+    private enum Storage {
+        case text(WritableKeyPath<Paper, String>)
+        case optional(WritableKeyPath<Paper, String?>)
+    }
+    private let storage: Storage
+    let types: Set<PaperType>
+
+    init(id: String, title: String, keyPath: WritableKeyPath<Paper, String>, types: Set<PaperType>) {
+        self.id = id; self.titleKey = title; storage = .text(keyPath); self.types = types
+    }
+
+    init(id: String, title: String, optionalKeyPath: WritableKeyPath<Paper, String?>, types: Set<PaperType>) {
+        self.id = id; self.titleKey = title; storage = .optional(optionalKeyPath); self.types = types
+    }
+
+    func value(in paper: Paper) -> String {
+        switch storage {
+        case .text(let keyPath): return paper[keyPath: keyPath]
+        case .optional(let keyPath): return paper[keyPath: keyPath] ?? ""
+        }
+    }
+
+    func setValue(_ value: String, in paper: inout Paper) {
+        switch storage {
+        case .text(let keyPath): paper[keyPath: keyPath] = value
+        case .optional(let keyPath): paper[keyPath: keyPath] = value.nilIfBlank
+        }
+    }
+
+    static let all: [InspectorMetadataField] = [
+        .init(id: "subtitle", title: "副标题", optionalKeyPath: \.subtitle, types: Set(PaperType.allCases)),
+        .init(id: "editors", title: "编辑", keyPath: \.editorsText, types: [.book, .inBook, .inCollection, .proceedings]),
+        .init(id: "translators", title: "译者", keyPath: \.translatorsText, types: [.book, .inBook, .inCollection]),
+        .init(id: "address", title: "地址", optionalKeyPath: \.address, types: Set(PaperType.allCases)),
+        .init(id: "organization", title: "组织", optionalKeyPath: \.organization, types: [.report, .patent, .inProceedings, .proceedings]),
+        .init(id: "type", title: "文献子类型", optionalKeyPath: \.type, types: [.thesis, .report, .patent, .misc]),
+        .init(id: "urlDate", title: "访问日期", optionalKeyPath: \.urlDate, types: Set(PaperType.allCases)),
+        .init(id: "journal", title: "期刊", keyPath: \.journal, types: [.article, .preprint]),
+        .init(id: "bookTitle", title: "书名 / 会议录", keyPath: \.bookTitle, types: [.inBook, .inCollection, .inProceedings, .proceedings]),
+        .init(id: "publisher", title: "出版社", keyPath: \.publisher, types: [.book, .inBook, .inCollection, .inProceedings, .proceedings, .report]),
+        .init(id: "institution", title: "机构", keyPath: \.institution, types: [.report, .patent]),
+        .init(id: "school", title: "学校", keyPath: \.school, types: [.thesis]),
+        .init(id: "series", title: "系列", keyPath: \.series, types: [.book, .inBook, .inCollection, .proceedings]),
+        .init(id: "volume", title: "卷", keyPath: \.volume, types: [.article, .book, .inBook, .inCollection, .inProceedings, .proceedings]),
+        .init(id: "issue", title: "期", keyPath: \.issue, types: [.article]),
+        .init(id: "pages", title: "页码", keyPath: \.pages, types: [.article, .inBook, .inCollection, .inProceedings]),
+        .init(id: "month", title: "月份", keyPath: \.month, types: Set(PaperType.allCases)),
+        .init(id: "doi", title: "DOI", keyPath: \.doi, types: Set(PaperType.allCases)),
+        .init(id: "isbn", title: "ISBN", keyPath: \.isbn, types: Set(PaperType.allCases)),
+        .init(id: "url", title: "URL", keyPath: \.url, types: Set(PaperType.allCases)),
+        .init(id: "language", title: "语言", keyPath: \.language, types: Set(PaperType.allCases)),
+        .init(id: "event", title: "会议名称", keyPath: \.event, types: [.inProceedings, .proceedings]),
+        .init(id: "eventDate", title: "会议日期", keyPath: \.eventDate, types: [.inProceedings, .proceedings]),
+        .init(id: "venue", title: "会议地点", keyPath: \.venue, types: [.inProceedings, .proceedings]),
+        .init(id: "edition", title: "版次", keyPath: \.edition, types: [.book, .inBook, .inCollection]),
+        .init(id: "chapter", title: "章节", keyPath: \.chapter, types: [.inBook, .inCollection]),
+        .init(id: "eprint", title: "电子预印本", keyPath: \.eprint, types: Set(PaperType.allCases)),
+        .init(id: "eprintType", title: "预印本类型", keyPath: \.eprintType, types: [.preprint]),
+        .init(id: "eprintClass", title: "预印本分类", keyPath: \.eprintClass, types: [.preprint]),
+        .init(id: "pubState", title: "出版状态", keyPath: \.publicationState, types: Set(PaperType.allCases)),
+        .init(id: "howpublished", title: "出版方式", keyPath: \.howPublished, types: [.preprint, .online, .software, .dataset, .misc])
+    ]
+
+    static func primary(for paper: Paper) -> [InspectorMetadataField] {
+        let source: String?
+        switch paper.paperType {
+        case .article, .preprint: source = "journal"
+        case .book: source = "publisher"
+        case .inBook, .inCollection, .inProceedings, .proceedings: source = "bookTitle"
+        case .thesis: source = "school"
+        case .report, .patent: source = "institution"
+        default: source = nil
+        }
+        let bookTypes: Set<PaperType> = [.book, .inBook, .inCollection, .proceedings]
+        let ids = [source, "doi",
+                   bookTypes.contains(paper.paperType) || !paper.isbn.isEmpty ? "isbn" : nil,
+                   paper.paperType == .preprint || !paper.eprint.isEmpty ? "eprint" : nil,
+                   paper.paperType == .preprint || !paper.eprintClass.isEmpty ? "eprintClass" : nil,
+                   "url"].compactMap { $0 }
+        return ids.compactMap { id in all.first { $0.id == id } }
+    }
+
+    static func additional(for paper: Paper, including pinnedIDs: Set<String> = []) -> [InspectorMetadataField] {
+        let primaryIDs = Set(primary(for: paper).map(\.id))
+        return all.filter {
+            !primaryIDs.contains($0.id) &&
+            ($0.types.contains(paper.paperType) || pinnedIDs.contains($0.id) || !$0.value(in: paper).trimmed.isEmpty ||
+             ($0.id.hasPrefix("eprint") && !paper.eprint.trimmed.isEmpty))
+        }
     }
 }
 
 private struct PaperEditorView: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var paper: Paper
+    var isCurrentPaper: () -> Bool
+    var onCommitDraft: () -> Void
     @State private var selectedTab: InspectorTab = .metadata
     @State private var showMoreFields = false
+    @State private var showAdvancedFields = false
+    @AppStorage("PaperManager.Inspector.pinnedStandardFields") private var pinnedStandardFieldIDs = ""
     @State private var showExportPreview = false
     @State private var isRefreshingMetadata = false
 
@@ -111,6 +316,7 @@ private struct PaperEditorView: View {
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        .sheet(isPresented: $showAdvancedFields) { advancedFieldsSheet }
     }
 
     private var inspectorTabBar: some View {
@@ -133,10 +339,11 @@ private struct PaperEditorView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("paper-detail-tab-picker")
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 52)
+        .padding(.top, 0)
         .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) {
             Rectangle()
@@ -155,48 +362,35 @@ private struct PaperEditorView: View {
                         get: { paper.year.map(String.init) ?? "" },
                         set: { paper.year = Int($0.trimmed) }
                     ))
-                    inspectorField("来源", text: sourceBinding)
-                    inspectorField("标识符", text: identifierBinding)
-                    inspectorField("URL", text: $paper.url)
-                    inspectorField("页码", text: $paper.pages)
-
+                    ForEach(InspectorMetadataField.primary(for: paper)) { field in
+                        metadataField(field)
+                    }
                     DisclosureGroup("更多字段 · \(moreFieldValueCount)", isExpanded: $showMoreFields) {
-                        VStack(spacing: 0) {
-                            optionalInspectorField("副标题", text: $paper.subtitle, axis: .vertical)
-                            inspectorField("编辑", text: Binding(
-                                get: { paper.editorsText },
-                                set: { paper.editorsText = $0 }
-                            ), axis: .vertical)
-                            inspectorField("译者", text: Binding(
-                                get: { paper.translatorsText },
-                                set: { paper.translatorsText = $0 }
-                            ), axis: .vertical)
-                            inspectorField("出版社", text: $paper.publisher)
-                            inspectorField("位置", text: Binding(
-                                get: { paper.address ?? "" },
-                                set: { paper.address = $0.nilIfBlank }
-                            ))
-                            optionalInspectorField("组织", text: $paper.organization)
-                            inspectorField("会议名称", text: $paper.event)
-                            inspectorField("会议日期", text: $paper.eventDate)
-                            optionalInspectorField("学位", text: $paper.type)
-                            inspectorField("月份", text: $paper.month)
-                            inspectorField("语言", text: $paper.language)
-                            optionalInspectorField("访问日期", text: $paper.urlDate)
-                            inspectorField("电子预印本", text: $paper.eprint)
-                            inspectorField("预印本类型", text: $paper.eprintType)
-                            inspectorField("预印本分类", text: $paper.eprintClass)
-                            inspectorField("出版状态", text: $paper.publicationState)
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(pinnedAdditionalFields) { field in
+                                advancedMetadataField(field)
+                            }
+                            ForEach(paper.customFields.filter(\.pinned)) { field in
+                                customFieldRow(customFieldBinding(id: field.id))
+                            }
+                            Button("高级字段…") { showAdvancedFields = true }
+                                .accessibilityIdentifier("paper-open-advanced-fields")
                         }
                     }
                     .padding(.top, 6)
+                }
+
+                if paper.customFields.contains(where: { !$0.pinned }) {
+                    InspectorSection(title: "自定义字段") {
+                        customFieldRows
+                    }
                 }
 
                 InspectorSection(title: "文库") {
                     InspectorValueRow(title: "评分") {
                         HStack(spacing: 8) {
                             StarRatingView(rating: $paper.rating)
-                            Text(paper.rating == 0 ? "未评分" : "\(paper.rating) / 5")
+                            Text(paper.rating == 0 ? PMLocalization.text("未评分") : "\(paper.rating) / 5")
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -244,6 +438,12 @@ private struct PaperEditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 paperIdentityHeader
+                HStack {
+                    Button("刷新标注", systemImage: "arrow.clockwise") { refreshAnnotations() }
+                        .disabled(paper.primaryPDF == nil)
+                    Button("导出标注", systemImage: "square.and.arrow.up") { exportAnnotations() }
+                        .disabled(paper.annotations.isEmpty)
+                }
 
                 if paper.annotations.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
@@ -291,60 +491,22 @@ private struct PaperEditorView: View {
         }
     }
 
-    private var basicSection: some View {
-        Section("基础信息") {
-            field("标题", text: $paper.title, axis: .vertical)
-                .lineLimit(1...3)
-            optionalField("副标题", text: $paper.subtitle, axis: .vertical)
-                .lineLimit(1...2)
-            field("作者", text: Binding(
-                get: { paper.authorsText },
-                set: { paper.authorsText = $0 }
-            ), axis: .vertical)
-            .lineLimit(1...3)
-            field("编辑", text: Binding(
-                get: { paper.editorsText },
-                set: { paper.editorsText = $0 }
-            ), axis: .vertical)
-            .lineLimit(1...2)
-            field("译者", text: Binding(
-                get: { paper.translatorsText },
-                set: { paper.translatorsText = $0 }
-            ), axis: .vertical)
-            .lineLimit(1...2)
-            LabeledContent("年份") {
-                TextField("年份", text: Binding(
-                    get: { paper.year.map(String.init) ?? "" },
-                    set: { paper.year = Int($0.trimmed) }
-                ))
-                .multilineTextAlignment(.trailing)
-            }
-            Picker("类型", selection: $paper.paperType) {
-                ForEach(PaperType.allCases) { type in
-                    Text(type.label).tag(type)
-                }
-            }
-            field("Citekey", text: $paper.citekey)
-        }
-    }
-
-    private var sourceSection: some View {
-        Section("来源") {
-            field("期刊", text: $paper.journal)
-            field("书名/会议", text: $paper.bookTitle)
-            field("出版社", text: $paper.publisher)
-            field("卷", text: $paper.volume)
-            field("期", text: $paper.issue)
-            field("页码", text: $paper.pages)
-            field("DOI", text: $paper.doi)
-            field("ISBN", text: $paper.isbn)
-            field("URL", text: $paper.url)
-            optionalField("访问日期", text: $paper.urlDate)
-        }
-    }
-
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Menu {
+                Picker("文献类型", selection: $paper.paperType) {
+                    ForEach(PaperType.allCases) { type in
+                        Text(type.label).tag(type)
+                    }
+                }
+            } label: {
+                Text(paper.paperType.label)
+                    .font(PMTypography.captionRegular)
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("更改文献类型")
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: paper.hasPDF ? "doc.richtext" : "doc.text")
                     .foregroundStyle(.secondary)
@@ -364,15 +526,18 @@ private struct PaperEditorView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1...3)
 
-                    TextField("Citekey", text: $paper.citekey)
-                        .textFieldStyle(.plain)
+                    Text(paper.citekey)
+                        .textSelection(.enabled)
+                        // Keep AppKit's native AX value for selectable text.
+                        // A SwiftUI label override here recurses after an AX-
+                        // active inspector is rebuilt (see the native AX smoke).
+                        .help("引用键随元数据和引用格式自动更新")
                         .font(PMTypography.paperCaption)
                         .foregroundStyle(.secondary)
                 }
             }
 
             HStack(spacing: 8) {
-                StarRatingView(rating: $paper.rating)
                 Spacer()
                 if paper.primaryPDF != nil {
                     Button {
@@ -402,100 +567,39 @@ private struct PaperEditorView: View {
         }
     }
 
-    private var sourceBinding: Binding<String> {
-        Binding {
-            paper.sourceDisplay
-        } set: { value in
-            if !paper.bookTitle.trimmed.isEmpty && paper.journal.trimmed.isEmpty {
-                paper.bookTitle = value
-            } else if !paper.publisher.trimmed.isEmpty && paper.journal.trimmed.isEmpty && paper.bookTitle.trimmed.isEmpty {
-                paper.publisher = value
-            } else {
-                paper.journal = value
-            }
-        }
-    }
-
-    private var identifierBinding: Binding<String> {
-        Binding {
-            if let doi = paper.doi.nilIfBlank { return doi }
-            if let eprint = paper.eprint.nilIfBlank { return eprint }
-            return paper.isbn
-        } set: { value in
-            let clean = value.trimmed
-            if clean.looksLikeArxivID {
-                paper.eprint = clean
-                if paper.eprintType.trimmed.isEmpty {
-                    paper.eprintType = "arXiv"
-                }
-            } else if clean.uppercased().contains("ISBN") {
-                paper.isbn = clean.replacingOccurrences(of: "ISBN", with: "", options: .caseInsensitive).trimmed
-            } else {
-                paper.doi = clean
-            }
-        }
-    }
-
-    private var moreFieldValueCount: Int {
-        [
-            paper.subtitle ?? "",
-            paper.editorsText,
-            paper.translatorsText,
-            paper.publisher,
-            paper.address ?? "",
-            paper.organization ?? "",
-            paper.event,
-            paper.eventDate,
-            paper.type ?? "",
-            paper.month,
-            paper.language,
-            paper.urlDate ?? "",
-            paper.eprint,
-            paper.eprintType,
-            paper.eprintClass,
-            paper.publicationState
-        ].filter { !$0.trimmed.isEmpty }.count
-    }
-
     private var collectionSelector: some View {
-        Group {
-            if flattenedCollections.isEmpty {
-                Text("—")
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(flattenedCollections) { item in
-                            ToggleChip(
-                                title: item.collection.name,
-                                systemImage: "folder",
-                                isOn: containsBinding(id: item.collection.id, keyPath: \.collectionIDs)
-                            )
-                        }
-                    }
-                }
+        InspectorChipFlowLayout {
+            ForEach(flattenedCollections.filter { paper.collectionIDs.contains($0.id) }) { item in
+                ToggleChip(title: item.collection.name, systemImage: "folder",
+                           isOn: containsBinding(id: item.id, keyPath: \.collectionIDs))
             }
+            Menu {
+                ForEach(flattenedCollections) { item in
+                    Toggle(item.collection.name, isOn: containsBinding(id: item.id, keyPath: \.collectionIDs))
+                }
+            } label: { Label("添加到文集", systemImage: "plus") }
+            .labelStyle(.iconOnly)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("添加到文集")
         }
     }
 
     private var tagSelector: some View {
-        Group {
-            if store.tags.isEmpty {
-                Text("无")
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(store.tags) { tag in
-                            ToggleChip(
-                                title: tag.name,
-                                color: Color(hex: tag.colorHex),
-                                isOn: containsBinding(id: tag.id, keyPath: \.tagIDs)
-                            )
-                        }
-                    }
-                }
+        InspectorChipFlowLayout {
+            ForEach(store.tags.filter { paper.tagIDs.contains($0.id) }) { tag in
+                ToggleChip(title: tag.name, color: Color(hex: tag.colorHex),
+                           isOn: containsBinding(id: tag.id, keyPath: \.tagIDs))
             }
+            Menu {
+                ForEach(store.tags) { tag in
+                    Toggle(tag.name, isOn: containsBinding(id: tag.id, keyPath: \.tagIDs))
+                }
+            } label: { Label("添加标签", systemImage: "plus") }
+            .labelStyle(.iconOnly)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("添加标签")
         }
     }
 
@@ -505,7 +609,7 @@ private struct PaperEditorView: View {
                 Button {
                     attach(types: [UTType.pdf], kind: AttachmentKind.pdf)
                 } label: {
-                    Label(paper.hasPDF ? "替换 PDF" : "添加 PDF", systemImage: "doc.badge.plus")
+                    Label(PMLocalization.text(paper.hasPDF ? "替换 PDF" : "添加 PDF"), systemImage: "doc.badge.plus")
                 }
 
                 Button {
@@ -532,6 +636,11 @@ private struct PaperEditorView: View {
                                 .font(PMTypography.captionRegular)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                            if attachment.isReadOnlyReference {
+                                Text("Lattice 原文件 · 只读引用")
+                                    .font(PMTypography.captionRegular)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         Button {
@@ -555,6 +664,131 @@ private struct PaperEditorView: View {
         }
     }
 
+    private var pinnedStandardIDs: Set<String> {
+        Set(pinnedStandardFieldIDs.split(separator: ",").map(String.init))
+    }
+
+    private var additionalFields: [InspectorMetadataField] {
+        InspectorMetadataField.additional(for: paper, including: pinnedStandardIDs)
+    }
+
+    private var pinnedAdditionalFields: [InspectorMetadataField] {
+        additionalFields.filter { pinnedStandardIDs.contains($0.id) }
+    }
+
+    private var moreFieldValueCount: Int {
+        pinnedAdditionalFields.filter { !$0.value(in: paper).trimmed.isEmpty }.count +
+        paper.customFields.filter(\.pinned).count
+    }
+
+    private func metadataField(_ field: InspectorMetadataField) -> some View {
+        inspectorField(field.id == "journal" && paper.paperType == .preprint ? "来源" : field.title, text: Binding(
+            get: { field.value(in: paper) },
+            set: { field.setValue($0, in: &paper) }
+        ), axis: ["subtitle", "editors", "translators"].contains(field.id) ? .vertical : .horizontal)
+        .accessibilityIdentifier("paper-field-\(field.id)")
+    }
+
+    private func advancedMetadataField(_ field: InspectorMetadataField) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            metadataField(field)
+            Button {
+                var ids = pinnedStandardIDs
+                if !ids.insert(field.id).inserted { ids.remove(field.id) }
+                pinnedStandardFieldIDs = ids.sorted().joined(separator: ",")
+            } label: {
+                Image(systemName: pinnedStandardIDs.contains(field.id) ? "pin.fill" : "pin")
+            }
+            .buttonStyle(.borderless)
+            .help(pinnedStandardIDs.contains(field.id) ? "取消固定到更多字段" : "固定到更多字段")
+            .accessibilityLabel(PMLocalization.text(pinnedStandardIDs.contains(field.id) ? "取消置顶" : "置顶"))
+            .accessibilityIdentifier("advanced-fields-pin-typed-\(field.id)")
+        }
+    }
+
+    private var advancedFieldsSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("\(paper.displayTitle) 高级字段")
+                .font(.headline)
+                .lineLimit(2)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("标准字段").font(PMTypography.headline)
+                    ForEach(additionalFields) { field in advancedMetadataField(field) }
+                    Divider()
+                    Text("自定义字段").font(PMTypography.headline)
+                    ForEach(paper.customFields) { field in
+                        customFieldRow(customFieldBinding(id: field.id))
+                    }
+                    addCustomFieldButton
+                }
+                .padding(.horizontal, 2)
+            }
+            HStack {
+                Spacer()
+                Button("完成") { showAdvancedFields = false }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 560, height: 600)
+    }
+
+    private func customFieldBinding(id: UUID) -> Binding<CustomField> {
+        Binding {
+            paper.customFields.first { $0.id == id } ?? CustomField(id: id, key: "", value: "")
+        } set: { value in
+            guard let index = paper.customFields.firstIndex(where: { $0.id == id }) else { return }
+            paper.customFields[index] = value
+        }
+    }
+
+    private var customFieldRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(paper.customFields.filter { !$0.pinned }) { field in
+                customFieldRow(customFieldBinding(id: field.id))
+            }
+            addCustomFieldButton
+        }
+    }
+
+    private var addCustomFieldButton: some View {
+        Button {
+            paper.customFields.append(CustomField(key: "", value: ""))
+        } label: {
+            Label("添加自定义字段", systemImage: "plus")
+        }
+        .accessibilityIdentifier("paper-add-custom-field")
+    }
+
+    private func customFieldRow(_ field: Binding<CustomField>) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            TextField("字段名", text: field.key)
+                .frame(width: 82)
+            TextField("值", text: field.value, axis: .vertical)
+                .lineLimit(1...3)
+            Button {
+                field.pinned.wrappedValue.toggle()
+            } label: {
+                Image(systemName: field.wrappedValue.pinned ? "pin.fill" : "pin")
+            }
+            .help(field.wrappedValue.pinned ? "取消置顶" : "固定到更多字段")
+            .accessibilityLabel(PMLocalization.text(field.wrappedValue.pinned ? "取消置顶字段" : "置顶字段"))
+            Button(role: .destructive) {
+                let id = field.wrappedValue.id
+                paper.customFields.removeAll { $0.id == id }
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .help("删除自定义字段")
+            .accessibilityLabel("删除自定义字段")
+        }
+        .textFieldStyle(.plain)
+        .font(PMTypography.paperCallout)
+        .padding(.vertical, 4)
+        .accessibilityIdentifier("custom-field-\(field.wrappedValue.id.uuidString)")
+    }
+
     private func inspectorField(_ title: String, text: Binding<String>, axis: Axis = .horizontal) -> some View {
         InspectorValueRow(title: title) {
             TextField("—", text: text, axis: axis)
@@ -566,236 +800,6 @@ private struct PaperEditorView: View {
 
     private func optionalInspectorField(_ title: String, text: Binding<String?>, axis: Axis = .horizontal) -> some View {
         inspectorField(title, text: Binding(
-            get: { text.wrappedValue ?? "" },
-            set: { text.wrappedValue = $0.nilIfBlank }
-        ), axis: axis)
-    }
-
-    private var organizationSection: some View {
-        Section("组织") {
-            if store.collections.isEmpty && store.tags.isEmpty {
-                Text("暂无文集或标签")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(flattenedCollections) { item in
-                    Toggle(isOn: containsBinding(id: item.collection.id, keyPath: \.collectionIDs)) {
-                        Label(item.collection.name, systemImage: "folder")
-                            .padding(.leading, CGFloat(item.depth * 12))
-                    }
-                }
-
-                ForEach(store.tags) { tag in
-                    Toggle(isOn: containsBinding(id: tag.id, keyPath: \.tagIDs)) {
-                        HStack {
-                            Circle()
-                                .fill(Color(hex: tag.colorHex))
-                                .frame(width: 8, height: 8)
-                            Text(tag.name)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var attachmentSection: some View {
-        Section("附件") {
-            HStack {
-                Button {
-                    attach(types: [UTType.pdf], kind: AttachmentKind.pdf)
-                } label: {
-                    Label(paper.hasPDF ? "替换 PDF" : "添加 PDF", systemImage: "doc.badge.plus")
-                }
-
-                Button {
-                    attach(types: [.data], kind: .file)
-                } label: {
-                    Label("添加文件", systemImage: "paperclip")
-                }
-            }
-
-            if paper.attachments.isEmpty {
-                Text("尚未关联 PDF 或附件。")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(paper.attachments) { attachment in
-                    HStack {
-                        Image(systemName: attachment.kind == .pdf ? "doc.richtext" : "paperclip")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading) {
-                            Text(attachment.displayName)
-                                .lineLimit(1)
-                            Text(attachment.filePath)
-                                .font(PMTypography.captionRegular)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Button {
-                            openAttachment(attachment)
-                        } label: {
-                            Label("打开", systemImage: "arrow.up.right")
-                        }
-                        Button(role: .destructive) {
-                            paper.attachments.removeAll { $0.id == attachment.id }
-                        } label: {
-                            Label("移除", systemImage: "trash")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var annotationSection: some View {
-        Section("标注") {
-            LabeledContent("数量") {
-                Text("\(paper.annotations.count) 条")
-                    .foregroundStyle(.secondary)
-            }
-
-            Button {
-                refreshAnnotations()
-            } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
-            }
-            .disabled(paper.primaryPDF == nil)
-
-            Button {
-                exportAnnotations()
-            } label: {
-                Label("导出所有标注", systemImage: "square.and.arrow.up")
-            }
-            .disabled(paper.annotations.isEmpty)
-
-            if paper.annotations.isEmpty {
-                Text("从已关联 PDF 中提取高亮、批注和形状标注。")
-                    .foregroundStyle(.secondary)
-            } else {
-                if paper.annotations.count > 80 {
-                    Text("为保持 Inspector 流畅，当前仅显示前 80 条标注。导出时仍会包含全部标注。")
-                        .font(PMTypography.captionRegular)
-                        .foregroundStyle(.secondary)
-                }
-
-                ForEach(Array(paper.annotations.prefix(80))) { annotation in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("p. \(annotation.page)")
-                            Text(annotation.kind.rawValue)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Circle()
-                                .fill(Color(hex: annotation.colorHex))
-                                .frame(width: 8, height: 8)
-                            Button {
-                                ExportService.copyToPasteboard(annotation.copyText)
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                        if !annotation.selectedText.trimmed.isEmpty {
-                            Text(annotation.selectedText)
-                                .textSelection(.enabled)
-                        }
-                        if !annotation.note.trimmed.isEmpty {
-                            Text(annotation.note)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
-                        if let imageFilePath = annotation.imageFilePath {
-                            AnnotationImagePreview(path: imageFilePath)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var textSection: some View {
-        Section("摘要与笔记") {
-            VStack(alignment: .leading) {
-                Text("摘要")
-                TextEditor(text: $paper.abstract)
-                    .frame(minHeight: 80)
-            }
-
-            VStack(alignment: .leading) {
-                Text("笔记")
-                TextEditor(text: $paper.notes)
-                    .frame(minHeight: 80)
-            }
-        }
-    }
-
-    private var moreFieldsSection: some View {
-        Section("更多字段") {
-            DisclosureGroup("展开 BibTeX / RIS 字段", isExpanded: $showMoreFields) {
-                field("机构", text: $paper.institution)
-                field("学校", text: $paper.school)
-                optionalField("地址", text: $paper.address)
-                field("系列", text: $paper.series)
-                field("版次", text: $paper.edition)
-                field("章节", text: $paper.chapter)
-                optionalField("类型", text: $paper.type)
-                optionalField("组织", text: $paper.organization)
-                field("事件", text: $paper.event)
-                field("事件日期", text: $paper.eventDate)
-                field("地点", text: $paper.venue)
-                field("语言", text: $paper.language)
-                field("Eprint", text: $paper.eprint)
-                field("Eprint Type", text: $paper.eprintType)
-                field("Eprint Class", text: $paper.eprintClass)
-                field("出版状态", text: $paper.publicationState)
-                field("How Published", text: $paper.howPublished)
-
-                LabeledContent("自定义字段") {
-                    Button {
-                        paper.customFields.append(CustomField(key: "", value: ""))
-                    } label: {
-                        Label("添加字段", systemImage: "plus")
-                    }
-                }
-
-                ForEach($paper.customFields) { $field in
-                    HStack {
-                        TextField("Key", text: $field.key)
-                        TextField("Value", text: $field.value)
-                        Toggle("置顶", isOn: $field.pinned)
-                        Button(role: .destructive) {
-                            paper.customFields.removeAll { $0.id == field.id }
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var exportPreviewSection: some View {
-        Section("输出预览") {
-            DisclosureGroup("Markdown 元数据", isExpanded: $showExportPreview) {
-                if showExportPreview {
-                    ScrollView(.horizontal) {
-                        Text(TemplateRenderer.renderMetadata(paper: paper, snapshot: store.snapshot, includeAnnotations: false))
-                            .font(PMTypography.monospacedCaption)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-        }
-    }
-
-    private func field(_ title: String, text: Binding<String>, axis: Axis = .horizontal) -> some View {
-        LabeledContent(title) {
-            TextField("—", text: text, axis: axis)
-        }
-    }
-
-    private func optionalField(_ title: String, text: Binding<String?>, axis: Axis = .horizontal) -> some View {
-        field(title, text: Binding(
             get: { text.wrappedValue ?? "" },
             set: { text.wrappedValue = $0.nilIfBlank }
         ), axis: axis)
@@ -826,25 +830,32 @@ private struct PaperEditorView: View {
     }
 
     private func attach(types: [UTType], kind: AttachmentKind) {
+        onCommitDraft()
         guard let url = DialogService.chooseFiles(title: "选择要关联的文件", types: types, multiple: false).first else { return }
         do {
-            try store.attachFile(url, to: paper.id, kind: kind)
+            try store.attachFile(url, to: paper.id, kind: kind, replacePrimary: kind == .pdf && paper.hasPDF)
             if let updated = store.paper(with: paper.id) {
                 paper = updated
             }
         } catch {
-            store.statusMessage = "无法关联 \(url.lastPathComponent)：\(error.localizedDescription)"
+            store.statusMessage = PMLocalization.format("无法关联 %@：%@", url.lastPathComponent, error.localizedDescription)
         }
     }
 
     private func refreshAnnotations() {
         guard let pdf = paper.primaryPDF else { return }
+        let requestedID = paper.id
         Task {
             do {
-                paper.annotations = try await ImportService.extractAnnotations(from: pdf, paperID: paper.id)
-                store.statusMessage = "标注已刷新。"
+                let annotations = try await ImportService.extractAnnotations(from: pdf, paperID: requestedID)
+                if isCurrentPaper(), paper.id == requestedID {
+                    paper.annotations = annotations
+                } else {
+                    store.updateAnnotations(annotations, for: requestedID)
+                }
+                store.statusMessage = PMLocalization.text("标注已刷新。")
             } catch {
-                store.statusMessage = "标注提取失败：\(error.localizedDescription)"
+                store.statusMessage = PMLocalization.format("标注提取失败：%@", error.localizedDescription)
             }
         }
     }
@@ -855,9 +866,9 @@ private struct PaperEditorView: View {
         do {
             let text = TemplateRenderer.renderAnnotations(paper.annotations, template: store.settings.annotationTemplate)
             try text.write(to: url, atomically: true, encoding: .utf8)
-            store.statusMessage = "标注导出完成。"
+            store.statusMessage = PMLocalization.text("标注导出完成。")
         } catch {
-            store.statusMessage = "标注导出失败：\(error.localizedDescription)"
+            store.statusMessage = PMLocalization.format("标注导出失败：%@", error.localizedDescription)
         }
     }
 
@@ -881,14 +892,18 @@ private struct PaperEditorView: View {
                     title: current.title.nilIfBlank
                 )
                 await MainActor.run {
-                    paper = metadata.merged(into: paper, replaceExisting: false)
+                    if isCurrentPaper(), paper.id == current.id {
+                        paper = metadata.merged(into: paper, replaceExisting: false)
+                    } else if let original = store.paper(with: current.id) {
+                        store.updatePaper(metadata.merged(into: original, replaceExisting: false))
+                    }
                     isRefreshingMetadata = false
-                    store.statusMessage = "元数据已刷新。"
+                    store.statusMessage = PMLocalization.text("元数据已刷新。")
                 }
             } catch {
                 await MainActor.run {
                     isRefreshingMetadata = false
-                    store.statusMessage = "元数据刷新失败：\(error.localizedDescription)"
+                    store.statusMessage = PMLocalization.format("元数据刷新失败：%@", error.localizedDescription)
                 }
             }
         }
@@ -899,7 +914,7 @@ private struct PaperEditorView: View {
         do {
             try pdf.withResolvedURL { url in
                 guard FileManager.default.fileExists(atPath: url.path) else {
-                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                    throw PaperManagerError.message(PMLocalization.text("PDF 文件不存在，可能已在 Finder 中移动或删除。"))
                 }
                 if let readerPath = store.settings.defaultPDFReaderPath.nilIfBlank {
                     let appURL = URL(fileURLWithPath: readerPath)
@@ -907,7 +922,7 @@ private struct PaperEditorView: View {
                     NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
                         if let error {
                             Task { @MainActor in
-                                store.statusMessage = "无法使用所选阅读器打开 PDF：\(error.localizedDescription)"
+                                store.statusMessage = PMLocalization.format("无法使用所选阅读器打开 PDF：%@", error.localizedDescription)
                             }
                         }
                     }
@@ -916,7 +931,7 @@ private struct PaperEditorView: View {
                 }
             }
         } catch {
-            store.statusMessage = "无法打开 PDF：\(error.localizedDescription)"
+            store.statusMessage = PMLocalization.format("无法打开 PDF：%@", error.localizedDescription)
         }
     }
 
@@ -925,12 +940,12 @@ private struct PaperEditorView: View {
         do {
             try pdf.withResolvedURL { url in
                 guard FileManager.default.fileExists(atPath: url.path) else {
-                    throw PaperManagerError.message("PDF 文件不存在，可能已在 Finder 中移动或删除。")
+                    throw PaperManagerError.message(PMLocalization.text("PDF 文件不存在，可能已在 Finder 中移动或删除。"))
                 }
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         } catch {
-            store.statusMessage = "无法在 Finder 中显示 PDF：\(error.localizedDescription)"
+            store.statusMessage = PMLocalization.format("无法在 Finder 中显示 PDF：%@", error.localizedDescription)
         }
     }
 
@@ -938,13 +953,48 @@ private struct PaperEditorView: View {
         do {
             try attachment.withResolvedURL { url in
                 guard FileManager.default.fileExists(atPath: url.path) else {
-                    throw PaperManagerError.message("文件不存在，可能已在 Finder 中移动或删除。")
+                    throw PaperManagerError.message(PMLocalization.text("文件不存在，可能已在 Finder 中移动或删除。"))
                 }
                 NSWorkspace.shared.open(url)
             }
         } catch {
-            store.statusMessage = "无法打开附件：\(error.localizedDescription)"
+            store.statusMessage = PMLocalization.format("无法打开附件：%@", error.localizedDescription)
         }
+    }
+}
+
+private struct InspectorChipFlowLayout: Layout {
+    private let spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrangement(width: proposal.width ?? 260, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrangement(width: bounds.width, subviews: subviews)
+        for (index, point) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y),
+                                 proposal: ProposedViewSize(subviews[index].sizeThatFits(.unspecified)))
+        }
+    }
+
+    private func arrangement(width: CGFloat, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var positions: [CGPoint] = []
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return (CGSize(width: width, height: y + rowHeight), positions)
     }
 }
 
@@ -960,7 +1010,7 @@ private struct InspectorSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(PMLocalization.text(title))
                 .font(PMTypography.sectionHeader)
                 .foregroundStyle(.secondary)
             VStack(spacing: 0) {
@@ -977,7 +1027,7 @@ private struct InspectorValueRow<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(title)
+                Text(PMLocalization.text(title))
                     .font(PMTypography.callout)
                     .foregroundStyle(.secondary)
                     .frame(width: 70, alignment: .leading)
@@ -1015,7 +1065,7 @@ private struct ToggleChip: View {
                 Text(title)
                     .lineLimit(1)
                 if isOn {
-                    Image(systemName: "checkmark")
+                    Image(systemName: "xmark")
                         .imageScale(.small)
                 }
             }
@@ -1126,13 +1176,13 @@ private extension ResearchAnnotation {
 private extension AnnotationKind {
     var displayTitle: String {
         switch self {
-        case .highlight: return "Highlight"
-        case .underline: return "Underline"
-        case .strikeout: return "Strikeout"
-        case .note: return "Note"
-        case .freeText: return "Free Text"
-        case .square: return "Square"
-        case .circle: return "Circle"
+        case .highlight: return PMLocalization.text("Highlight")
+        case .underline: return PMLocalization.text("Underline")
+        case .strikeout: return PMLocalization.text("Strikeout")
+        case .note: return PMLocalization.text("Note")
+        case .freeText: return PMLocalization.text("Free Text")
+        case .square: return PMLocalization.text("Square")
+        case .circle: return PMLocalization.text("Circle")
         }
     }
 }

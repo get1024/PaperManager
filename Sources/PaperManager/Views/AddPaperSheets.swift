@@ -4,10 +4,19 @@ struct ManualPaperSheet: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.dismiss) private var dismiss
     let targetFilter: LibraryFilter?
+    var onOpenExisting: (UUID) -> Void = { _ in }
 
     @State private var draft = Paper()
+    @State private var importPlan: ImportPlan?
+    @State private var errorMessage: String?
 
     var body: some View {
+        if let importPlan {
+            ImportPreviewView(plan: importPlan, targetFilter: targetFilter, onOpenExisting: onOpenExisting)
+        } else { editor }
+    }
+
+    private var editor: some View {
         Form {
             Section("元数据") {
                 TextField("标题", text: $draft.title)
@@ -44,13 +53,23 @@ struct ManualPaperSheet: View {
                     .frame(height: 100)
             }
 
+            if let errorMessage {
+                Text(errorMessage).foregroundStyle(.red)
+            }
+
             Section {
                 HStack {
                     Spacer()
                     Button("取消") { dismiss() }
                     Button("添加") {
-                        store.addPaper(draft, targetFilter: targetFilter)
-                        dismiss()
+                        if store.duplicatePaperID(for: draft) != nil {
+                            importPlan = ImportService.prepare(papers: [draft], store: store)
+                        } else {
+                            do {
+                                _ = try store.addPaperDurably(draft, targetFilter: targetFilter)
+                                dismiss()
+                            } catch { errorMessage = error.localizedDescription }
+                        }
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(draft.title.trimmed.isEmpty)
@@ -67,12 +86,20 @@ struct DOISheet: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.dismiss) private var dismiss
     let targetFilter: LibraryFilter?
+    var onOpenExisting: (UUID) -> Void = { _ in }
 
     @State private var query = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var importPlan: ImportPlan?
 
     var body: some View {
+        if let importPlan {
+            ImportPreviewView(plan: importPlan, targetFilter: targetFilter, onOpenExisting: onOpenExisting)
+        } else { lookupForm }
+    }
+
+    private var lookupForm: some View {
         Form {
             Section("元数据查找") {
                 TextField("DOI、arXiv ID、ISBN 或标题", text: $query)
@@ -92,7 +119,7 @@ struct DOISheet: View {
                 HStack {
                     Spacer()
                     Button("取消") { dismiss() }
-                    Button(isLoading ? "正在获取" : "添加") { add() }
+                    Button(PMLocalization.text(isLoading ? "正在获取" : "添加")) { add() }
                         .keyboardShortcut(.defaultAction)
                         .disabled(query.trimmed.isEmpty || isLoading)
                 }
@@ -109,8 +136,8 @@ struct DOISheet: View {
         errorMessage = nil
         Task {
             do {
-                _ = try await ImportService.addViaLookup(query, into: store, targetFilter: targetFilter)
-                dismiss()
+                let paper = try await ImportService.lookupPaper(query)
+                importPlan = ImportService.prepare(papers: [paper], store: store)
             } catch {
                 errorMessage = error.localizedDescription
             }

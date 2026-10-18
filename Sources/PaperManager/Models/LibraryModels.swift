@@ -4,6 +4,7 @@ enum PaperType: String, Codable, CaseIterable, Identifiable {
     case article
     case book
     case inBook
+    case inCollection
     case inProceedings
     case proceedings
     case thesis
@@ -20,20 +21,21 @@ enum PaperType: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .article: return "Journal Article"
-        case .book: return "Book"
-        case .inBook: return "Book Section"
-        case .inProceedings: return "Conference Paper"
-        case .proceedings: return "Proceedings"
-        case .thesis: return "Thesis"
-        case .preprint: return "Preprint"
-        case .report: return "Report"
-        case .patent: return "Patent"
-        case .dataset: return "Dataset"
-        case .software: return "Software"
-        case .online: return "Online Resource"
-        case .manuscript: return "Manuscript"
-        case .misc: return "Misc"
+        case .article: return PMLocalization.text("期刊论文")
+        case .book: return PMLocalization.text("图书")
+        case .inBook: return PMLocalization.text("图书章节")
+        case .inCollection: return PMLocalization.text("论文集章节")
+        case .inProceedings: return PMLocalization.text("会议论文")
+        case .proceedings: return PMLocalization.text("会议论文集")
+        case .thesis: return PMLocalization.text("学位论文")
+        case .preprint: return PMLocalization.text("预印本")
+        case .report: return PMLocalization.text("报告")
+        case .patent: return PMLocalization.text("专利")
+        case .dataset: return PMLocalization.text("数据集")
+        case .software: return PMLocalization.text("软件")
+        case .online: return PMLocalization.text("在线资源")
+        case .manuscript: return PMLocalization.text("手稿")
+        case .misc: return PMLocalization.text("其他")
         }
     }
 
@@ -42,6 +44,7 @@ enum PaperType: String, Codable, CaseIterable, Identifiable {
         case .article: return "article"
         case .book: return "book"
         case .inBook: return "inbook"
+        case .inCollection: return "incollection"
         case .inProceedings: return "inproceedings"
         case .proceedings: return "proceedings"
         case .thesis: return "phdthesis"
@@ -60,7 +63,7 @@ enum PaperType: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .article: return "JOUR"
         case .book: return "BOOK"
-        case .inBook: return "CHAP"
+        case .inBook, .inCollection: return "CHAP"
         case .inProceedings: return "CPAPER"
         case .proceedings: return "CONF"
         case .thesis: return "THES"
@@ -79,10 +82,12 @@ enum PaperType: String, Codable, CaseIterable, Identifiable {
         switch value.lowercased() {
         case "article": return .article
         case "book": return .book
-        case "inbook", "incollection": return .inBook
+        case "inbook": return .inBook
+        case "incollection": return .inCollection
         case "inproceedings", "conference": return .inProceedings
         case "proceedings": return .proceedings
-        case "phdthesis", "mastersthesis": return .thesis
+        case "thesis", "phdthesis", "mastersthesis": return .thesis
+        case "preprint": return .preprint
         case "techreport", "report": return .report
         case "patent": return .patent
         case "dataset": return .dataset
@@ -107,6 +112,7 @@ struct Attachment: Identifiable, Codable, Hashable {
     var bookmarkData: Data?
     var fileSize: Int64?
     var missing: Bool = false
+    var isReadOnlyReference: Bool = false
     var addedAt: Date = Date()
 
     enum CodingKeys: String, CodingKey {
@@ -117,6 +123,7 @@ struct Attachment: Identifiable, Codable, Hashable {
         case bookmarkData
         case fileSize
         case missing
+        case isReadOnlyReference
         case addedAt
     }
 
@@ -128,6 +135,7 @@ struct Attachment: Identifiable, Codable, Hashable {
         bookmarkData: Data? = nil,
         fileSize: Int64? = nil,
         missing: Bool = false,
+        isReadOnlyReference: Bool = false,
         addedAt: Date = Date()
     ) {
         self.id = id
@@ -137,6 +145,7 @@ struct Attachment: Identifiable, Codable, Hashable {
         self.bookmarkData = bookmarkData
         self.fileSize = fileSize
         self.missing = missing
+        self.isReadOnlyReference = isReadOnlyReference
         self.addedAt = addedAt
     }
 
@@ -150,6 +159,7 @@ struct Attachment: Identifiable, Codable, Hashable {
         bookmarkData = try container.decodeIfPresent(Data.self, forKey: .bookmarkData)
         fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize)
         missing = try container.decodeIfPresent(Bool.self, forKey: .missing) ?? false
+        isReadOnlyReference = try container.decodeIfPresent(Bool.self, forKey: .isReadOnlyReference) ?? false
         addedAt = try container.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
     }
 
@@ -421,6 +431,26 @@ struct Paper: Identifiable, Codable, Hashable {
         rhs.dateModified = .distantPast
         return lhs == rhs
     }
+
+    /// Commit only fields edited in the inspector. Native table operations may
+    /// have changed other fields since the draft was loaded.
+    func applyingEdits(to latest: Paper, from baseline: Paper) -> Paper {
+        guard id == latest.id, id == baseline.id else { return latest }
+        do {
+            let encoder = JSONEncoder()
+            let edited = try JSONSerialization.jsonObject(with: encoder.encode(self)) as! [String: Any]
+            let original = try JSONSerialization.jsonObject(with: encoder.encode(baseline)) as! [String: Any]
+            var merged = try JSONSerialization.jsonObject(with: encoder.encode(latest)) as! [String: Any]
+            for key in Set(edited.keys).union(original.keys) where key != "id" && key != "dateModified" {
+                let lhs = edited[key] as? NSObject
+                let rhs = original[key] as? NSObject
+                if lhs != rhs { merged[key] = edited[key] }
+            }
+            return try JSONDecoder().decode(Paper.self, from: JSONSerialization.data(withJSONObject: merged))
+        } catch {
+            return latest
+        }
+    }
 }
 
 struct PaperCollection: Identifiable, Codable, Hashable {
@@ -453,16 +483,16 @@ enum LibraryFilter: Hashable, Codable {
 
     var title: String {
         switch self {
-        case .all: return "全部文献"
-        case .recentlyAdded: return "最近添加"
-        case .recentlyOpened: return "最近打开"
-        case .unfiled: return "未归类"
-        case .missingPDF: return "缺少 PDF"
-        case .missingIDs: return "缺少标识符"
-        case .noTags: return "无标签"
-        case .rating(let value): return value > 0 ? "\(value) 星" : "未评分"
-        case .collection: return "文集"
-        case .tag: return "标签"
+        case .all: return PMLocalization.text("全部文献")
+        case .recentlyAdded: return PMLocalization.text("最近添加")
+        case .recentlyOpened: return PMLocalization.text("最近打开")
+        case .unfiled: return PMLocalization.text("未归类")
+        case .missingPDF: return PMLocalization.text("缺少 PDF")
+        case .missingIDs: return PMLocalization.text("缺少标识符")
+        case .noTags: return PMLocalization.text("无标签")
+        case .rating(let value): return value > 0 ? PMLocalization.format("%lld 星", value) : PMLocalization.text("未评分")
+        case .collection: return PMLocalization.text("文集")
+        case .tag: return PMLocalization.text("标签")
         }
     }
 }
@@ -480,13 +510,13 @@ enum PaperSortField: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .title: return "标题"
-        case .authors: return "作者"
-        case .year: return "年份"
-        case .source: return "来源"
-        case .rating: return "评分"
-        case .dateAdded: return "添加日期"
-        case .lastOpened: return "最近打开"
+        case .title: return PMLocalization.text("标题")
+        case .authors: return PMLocalization.text("作者")
+        case .year: return PMLocalization.text("年份")
+        case .source: return PMLocalization.text("来源")
+        case .rating: return PMLocalization.text("评分")
+        case .dateAdded: return PMLocalization.text("添加日期")
+        case .lastOpened: return PMLocalization.text("最近打开")
         }
     }
 }
@@ -498,12 +528,25 @@ struct PaperSortDescriptor: Codable, Hashable {
     static let defaultValue = PaperSortDescriptor()
 }
 
+/// Matches the five observed fields of a Lattice 3.0 archive template.
+/// Annotation formatting remains a separate global setting.
+struct MetadataTemplate: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var name: String
+    var content: String
+    var isDefault: Bool = false
+    var dateCreated: Date = Date()
+
+    static let legacyID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+}
+
 struct LibrarySnapshot: Codable {
     var schemaVersion: Int = 1
     var papers: [Paper] = []
     var collections: [PaperCollection] = []
     var tags: [PaperTag] = []
     var settings: AppSettings = .defaults
+    var metadataTemplates: [MetadataTemplate]? = nil
 
     static let empty = LibrarySnapshot()
 }

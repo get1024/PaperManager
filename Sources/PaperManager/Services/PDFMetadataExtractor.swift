@@ -34,6 +34,7 @@ enum PDFMetadataExtractor {
             paper.eprint = arxivID
             paper.eprintType = "arxiv"
         }
+        paper.isbn = extractISBN(from: text) ?? ""
         return paper
     }
 
@@ -76,6 +77,26 @@ enum PDFMetadataExtractor {
                 ? Range(match.range(at: 2), in: text).map { String(text[$0]) } ?? ""
                 : ""
             return String(text[idRange]) + version
+        }
+        return nil
+    }
+
+    static func extractISBN(from text: String) -> String? {
+        let pattern = #"(?i)\bISBN(?:[- ]1[03])?\s*:?\s*([0-9](?:[\s-]?[0-9X]){9}(?:(?:[\s-]?[0-9]){3})?)(?![0-9X])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        for match in regex.matches(in: text, range: range) {
+            guard let valueRange = Range(match.range(at: 1), in: text) else { continue }
+            let candidate = text[valueRange].uppercased().filter { $0.isNumber || $0 == "X" }
+            let digits = candidate.compactMap { $0.wholeNumberValue ?? ($0 == "X" ? 10 : nil) }
+            if digits.count == 13, digits.allSatisfy({ $0 < 10 }),
+               zip(digits.indices, digits).reduce(0, { $0 + $1.1 * ($1.0.isMultiple(of: 2) ? 1 : 3) }).isMultiple(of: 10) {
+                return candidate
+            }
+            if digits.count == 10, digits.dropLast().allSatisfy({ $0 < 10 }),
+               zip(digits.indices, digits).reduce(0, { $0 + (10 - $1.0) * $1.1 }).isMultiple(of: 11) {
+                return candidate
+            }
         }
         return nil
     }

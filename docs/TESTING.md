@@ -1,0 +1,20 @@
+# 测试
+
+所有测试使用独立临时文库和合成 fixture，不操作用户的 Lattice 或 Zotero 文库。
+
+| 命令 | 范围 |
+|---|---|
+| `scripts/test.sh core` | 文献/引用、实际 TCP/API、归档、编辑、文集标签、文件库、Zotero、导入备份、语言模板、Intents、CLI/MCP/浏览器逻辑 |
+| `scripts/test.sh ui` | 原生表格、真实 App/WindowGroup 的尺寸与面板收放、设置页五个面板 |
+| `scripts/test.sh all` | core + ui |
+| `scripts/test.sh ax` | 独立外部 AX 客户端、检查器崩溃回归和全表辅助功能压力测量 |
+
+各 `scripts/test-*.sh` 可单独执行。连接器测试位于 `Tests/Connector/run.sh`，需要 Node.js 18+；自动查找 PATH、标准 NVM/Homebrew 目录，也可用 `PAPERMANAGER_NODE` 指定可执行文件。
+
+共用工具链配置在 `scripts/lib/toolchain.sh`。默认选择有效 Xcode/CLT 和主机架构；可通过 `PAPERMANAGER_SDK`、`PAPERMANAGER_TEST_SDK` 指定 SDK。无需安装 REA/Ghidra 即可构建和运行重构测试。
+
+结果日志保存在 `.build/test-results`。UI 组需要 macOS WindowServer 会话，AX 组还需要已有的辅助功能访问权限；脚本不会自动授予权限。几何测试、后台 AX 和真实屏幕操作是不同验证范围。
+
+`test-native-window-group.sh` 包含九个阶段，覆盖不同窗口尺寸、侧栏/检查器收放及选择变化。可设置 `PAPERMANAGER_GEOMETRY_NEGATIVE_CONTROL=1` 在临时源副本移除尺寸修复作负控；负控应失败。
+
+CI 在主分支构建前运行 core 和项目成员检查，再使用完整 Xcode 构建 app/CLI，签名并产生安装包。测试通过不等于 Shortcuts 注册、Safari 发行或所有视觉操作已验收。

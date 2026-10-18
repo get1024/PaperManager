@@ -25,13 +25,30 @@
 		AB0000000000000000000010 /* AddPaperSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000010 /* AddPaperSheets.swift */; };
 		AB0000000000000000000011 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000011 /* ContentView.swift */; };
 		AB0000000000000000000012 /* PaperDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000012 /* PaperDetailView.swift */; };
-		AB0000000000000000000013 /* PaperListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000013 /* PaperListView.swift */; };
 		AB0000000000000000000014 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000014 /* SettingsView.swift */; };
-		AB0000000000000000000015 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000015 /* SidebarView.swift */; };
 		AB0000000000000000000016 /* ViewUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000016 /* ViewUtilities.swift */; };
 		AB0000000000000000000017 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AF0000000000000000000017 /* PrivacyInfo.xcprivacy */; };
 		AB0000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001A /* Assets.xcassets */; };
 		AB0000000000000000000019 /* QuickLookService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001B /* QuickLookService.swift */; };
+		AB000000000000000000001A /* LatticeImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001C /* LatticeImportService.swift */; };
+		AB000000000000000000001B /* NativeLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001D /* NativeLibraryView.swift */; };
+		AB000000000000000000001E /* LatticeArchiveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF000000000000000000001E /* LatticeArchiveService.swift */; };
+		59B5B91A44D08893567F6AEA /* MetadataIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F618DBFAA5BE47755F1211AF /* MetadataIntents.swift */; };
+		A17E220677AB3C131E9EF8E2 /* FileLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C534D63B66DB994C74810D55 /* FileLibraryService.swift */; };
+		38F1011FEFA24D5A75A54601 /* MetadataTemplateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A107586280E35915E6C33EB5 /* MetadataTemplateService.swift */; };
+		48D8664B0DC1EA3A9996D33E /* PMLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A940B3C04D8AAED8C6F318F /* PMLocalization.swift */; };
+		39BF6763A476F03CAB80D2CA /* PortableBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0983A3F92557588CB3CC3F5B /* PortableBackupService.swift */; };
+		59D518DD13DDE0CE2EE87EF2 /* ZoteroImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB0711EE781DC1E416BD7012 /* ZoteroImportService.swift */; };
+		2E369A9EAC37436A4305CD97 /* HelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDCFF88C5124D772D142FA2C /* HelpView.swift */; };
+		914CAD2EBB301ED563B16952 /* ImportPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E31267E8EC9EAFFC6551EE58 /* ImportPreviewView.swift */; };
+		E785E59B19BF228EE84E9E71 /* ZoteroImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5082D2B1B01A9A3E29F5E630 /* ZoteroImportView.swift */; };
+		31E47623E9E496DCBEA27AA8 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = AA785600574311E1454D610E /* Localizable.strings */; };
+		4AB07BDD39CE9A6060A3504E /* BrowserExtension in Resources */ = {isa = PBXBuildFile; fileRef = 98222FF2030A29222D567A8D /* BrowserExtension */; };
+		B0F918D5D66DFD9B61373BC4 /* ConnectorCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC6D25A9948A301EC63B08A /* ConnectorCore.swift */; };
+		A21F31D299C01143F7EF4192 /* MCPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA5E36B9E2EC7B5F8EFC90C /* MCPServer.swift */; };
+		1F2A4E78E8F9B3207CA8D5BF /* PaperManagerCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2598B60FA08235CDAED1E9C /* PaperManagerCLI.swift */; };
+		26856B008B514A9004C54DBB /* Resources.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6C80C89EF62521553F0B38 /* Resources.swift */; };
+		06E3300504B809F88D432F19 /* PaperManagerCLI in Embed Helpers */ = {isa = PBXBuildFile; fileRef = B4F90081C0E3CDB8A9A38C6B /* PaperManagerCLI */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,16 +70,75 @@
 		AF0000000000000000000010 /* AddPaperSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPaperSheets.swift; sourceTree = "<group>"; };
 		AF0000000000000000000011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AF0000000000000000000012 /* PaperDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperDetailView.swift; sourceTree = "<group>"; };
-		AF0000000000000000000013 /* PaperListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperListView.swift; sourceTree = "<group>"; };
 		AF0000000000000000000014 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		AF0000000000000000000015 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AF0000000000000000000016 /* ViewUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewUtilities.swift; sourceTree = "<group>"; };
 		AF0000000000000000000017 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AF0000000000000000000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AF0000000000000000000019 /* PaperManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaperManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF000000000000000000001A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AF000000000000000000001B /* QuickLookService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookService.swift; sourceTree = "<group>"; };
+		AF000000000000000000001C /* LatticeImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeImportService.swift; sourceTree = "<group>"; };
+		AF000000000000000000001D /* NativeLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLibraryView.swift; sourceTree = "<group>"; };
+		AF000000000000000000001E /* LatticeArchiveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatticeArchiveService.swift; sourceTree = "<group>"; };
+		F618DBFAA5BE47755F1211AF /* MetadataIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataIntents.swift; sourceTree = "<group>"; };
+		C534D63B66DB994C74810D55 /* FileLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileLibraryService.swift; sourceTree = "<group>"; };
+		A107586280E35915E6C33EB5 /* MetadataTemplateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataTemplateService.swift; sourceTree = "<group>"; };
+		0A940B3C04D8AAED8C6F318F /* PMLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PMLocalization.swift; sourceTree = "<group>"; };
+		0983A3F92557588CB3CC3F5B /* PortableBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortableBackupService.swift; sourceTree = "<group>"; };
+		CB0711EE781DC1E416BD7012 /* ZoteroImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoteroImportService.swift; sourceTree = "<group>"; };
+		EDCFF88C5124D772D142FA2C /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
+		E31267E8EC9EAFFC6551EE58 /* ImportPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPreviewView.swift; sourceTree = "<group>"; };
+		5082D2B1B01A9A3E29F5E630 /* ZoteroImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoteroImportView.swift; sourceTree = "<group>"; };
+		38D7C0841DDA5C4F937B9428 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "en"; path = "en.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		8FB43DBE0BB1F3EDC8F6D1DE /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		98222FF2030A29222D567A8D /* BrowserExtension */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BrowserExtension; sourceTree = "<group>"; };
+		6CC6D25A9948A301EC63B08A /* ConnectorCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorCore.swift; sourceTree = "<group>"; };
+		CBA5E36B9E2EC7B5F8EFC90C /* MCPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServer.swift; sourceTree = "<group>"; };
+		D2598B60FA08235CDAED1E9C /* PaperManagerCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperManagerCLI.swift; sourceTree = "<group>"; };
+		AC6C80C89EF62521553F0B38 /* Resources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Resources.swift; sourceTree = "<group>"; };
+		B4F90081C0E3CDB8A9A38C6B /* PaperManagerCLI */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = PaperManagerCLI; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C9EB4AEC79C237695FD4DEE5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D2141FD5D4A7BDA30EAEE6A6 /* Embed Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				06E3300504B809F88D432F19 /* PaperManagerCLI in Embed Helpers */,
+			);
+			name = "Embed Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXContainerItemProxy section */
+		F66EB8BCF59220FBAB1E8F5C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AP0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A5A997B71B439BE452D4103B;
+			remoteInfo = PaperManagerCLI;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		C0332754FA50CE6A9D1ECBEB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A5A997B71B439BE452D4103B /* PaperManagerCLI */;
+			targetProxy = F66EB8BCF59220FBAB1E8F5C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXGroup section */
 		AG0000000000000000000001 = {
@@ -70,6 +146,8 @@
 			children = (
 				AG0000000000000000000002 /* App */,
 				AG0000000000000000000003 /* Sources */,
+				C24F32892F6AE0014EBE57A9 /* PaperManagerCLI */,
+				98222FF2030A29222D567A8D /* BrowserExtension */,
 				AG0000000000000000000008 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -86,6 +164,7 @@
 			isa = PBXGroup;
 			children = (
 				AF0000000000000000000001 /* PaperManagerApp.swift */,
+				5CD815F7058279125C30217B /* Intents */,
 				AG0000000000000000000004 /* Models */,
 				AG0000000000000000000005 /* Services */,
 				AG0000000000000000000006 /* Views */,
@@ -106,12 +185,19 @@
 		AG0000000000000000000005 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				C534D63B66DB994C74810D55 /* FileLibraryService.swift */,
+				A107586280E35915E6C33EB5 /* MetadataTemplateService.swift */,
+				0A940B3C04D8AAED8C6F318F /* PMLocalization.swift */,
+				0983A3F92557588CB3CC3F5B /* PortableBackupService.swift */,
+				CB0711EE781DC1E416BD7012 /* ZoteroImportService.swift */,
 				AF0000000000000000000004 /* BackupService.swift */,
 				AF0000000000000000000005 /* BibTeXParser.swift */,
 				AF0000000000000000000006 /* CitekeyGenerator.swift */,
 				AF0000000000000000000007 /* CrossrefClient.swift */,
 				AF0000000000000000000008 /* ExportService.swift */,
 				AF0000000000000000000009 /* ImportService.swift */,
+				AF000000000000000000001C /* LatticeImportService.swift */,
+				AF000000000000000000001E /* LatticeArchiveService.swift */,
 				AF000000000000000000000A /* LibraryStore.swift */,
 				AF000000000000000000000B /* LocalAPIServer.swift */,
 				AF000000000000000000000C /* PDFMetadataExtractor.swift */,
@@ -126,12 +212,14 @@
 		AG0000000000000000000006 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				EDCFF88C5124D772D142FA2C /* HelpView.swift */,
+				E31267E8EC9EAFFC6551EE58 /* ImportPreviewView.swift */,
+				5082D2B1B01A9A3E29F5E630 /* ZoteroImportView.swift */,
 				AF0000000000000000000010 /* AddPaperSheets.swift */,
 				AF0000000000000000000011 /* ContentView.swift */,
+				AF000000000000000000001D /* NativeLibraryView.swift */,
 				AF0000000000000000000012 /* PaperDetailView.swift */,
-				AF0000000000000000000013 /* PaperListView.swift */,
 				AF0000000000000000000014 /* SettingsView.swift */,
-				AF0000000000000000000015 /* SidebarView.swift */,
 				AF0000000000000000000016 /* ViewUtilities.swift */,
 			);
 			path = Views;
@@ -142,6 +230,7 @@
 			children = (
 				AF000000000000000000001A /* Assets.xcassets */,
 				AF0000000000000000000017 /* PrivacyInfo.xcprivacy */,
+				AA785600574311E1454D610E /* Localizable.strings */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -150,8 +239,28 @@
 			isa = PBXGroup;
 			children = (
 				AF0000000000000000000019 /* PaperManager.app */,
+				B4F90081C0E3CDB8A9A38C6B /* PaperManagerCLI */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		5CD815F7058279125C30217B /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				F618DBFAA5BE47755F1211AF /* MetadataIntents.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		C24F32892F6AE0014EBE57A9 /* PaperManagerCLI */ = {
+			isa = PBXGroup;
+			children = (
+				6CC6D25A9948A301EC63B08A /* ConnectorCore.swift */,
+				CBA5E36B9E2EC7B5F8EFC90C /* MCPServer.swift */,
+				D2598B60FA08235CDAED1E9C /* PaperManagerCLI.swift */,
+				AC6C80C89EF62521553F0B38 /* Resources.swift */,
+			);
+			path = Sources/PaperManagerCLI;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -163,15 +272,31 @@
 			buildPhases = (
 				AS0000000000000000000001 /* Sources */,
 				AR0000000000000000000001 /* Resources */,
+				D2141FD5D4A7BDA30EAEE6A6 /* Embed Helpers */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C0332754FA50CE6A9D1ECBEB /* PBXTargetDependency */,
 			);
 			name = PaperManager;
 			productName = PaperManager;
 			productReference = AF0000000000000000000019 /* PaperManager.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A5A997B71B439BE452D4103B /* PaperManagerCLI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB6B56B451CC33A96E7FEE77 /* Build configuration list for PBXNativeTarget "PaperManagerCLI" */;
+			buildPhases = (
+				135AEACD7C0B42BB91D5EB0E /* Sources */,
+				C9EB4AEC79C237695FD4DEE5 /* Frameworks */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = PaperManagerCLI;
+			productName = PaperManagerCLI;
+			productReference = B4F90081C0E3CDB8A9A38C6B /* PaperManagerCLI */;
+			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
 
@@ -183,6 +308,9 @@
 				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					A5A997B71B439BE452D4103B = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					AA0000000000000000000001 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -194,6 +322,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = AG0000000000000000000001;
@@ -202,6 +331,7 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000001 /* PaperManager */,
+				A5A997B71B439BE452D4103B /* PaperManagerCLI */,
 			);
 		};
 /* End PBXProject section */
@@ -213,6 +343,8 @@
 			files = (
 				AB0000000000000000000017 /* PrivacyInfo.xcprivacy in Resources */,
 				AB0000000000000000000018 /* Assets.xcassets in Resources */,
+				31E47623E9E496DCBEA27AA8 /* Localizable.strings in Resources */,
+				4AB07BDD39CE9A6060A3504E /* BrowserExtension in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,6 +356,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				AB0000000000000000000001 /* PaperManagerApp.swift in Sources */,
+				59B5B91A44D08893567F6AEA /* MetadataIntents.swift in Sources */,
+				A17E220677AB3C131E9EF8E2 /* FileLibraryService.swift in Sources */,
+				38F1011FEFA24D5A75A54601 /* MetadataTemplateService.swift in Sources */,
+				48D8664B0DC1EA3A9996D33E /* PMLocalization.swift in Sources */,
+				39BF6763A476F03CAB80D2CA /* PortableBackupService.swift in Sources */,
+				59D518DD13DDE0CE2EE87EF2 /* ZoteroImportService.swift in Sources */,
+				2E369A9EAC37436A4305CD97 /* HelpView.swift in Sources */,
+				914CAD2EBB301ED563B16952 /* ImportPreviewView.swift in Sources */,
+				E785E59B19BF228EE84E9E71 /* ZoteroImportView.swift in Sources */,
 				AB0000000000000000000002 /* AppSettings.swift in Sources */,
 				AB0000000000000000000003 /* LibraryModels.swift in Sources */,
 				AB0000000000000000000004 /* BackupService.swift in Sources */,
@@ -232,6 +373,8 @@
 				AB0000000000000000000007 /* CrossrefClient.swift in Sources */,
 				AB0000000000000000000008 /* ExportService.swift in Sources */,
 				AB0000000000000000000009 /* ImportService.swift in Sources */,
+				AB000000000000000000001A /* LatticeImportService.swift in Sources */,
+				AB000000000000000000001E /* LatticeArchiveService.swift in Sources */,
 				AB000000000000000000000A /* LibraryStore.swift in Sources */,
 				AB000000000000000000000B /* LocalAPIServer.swift in Sources */,
 				AB000000000000000000000C /* PDFMetadataExtractor.swift in Sources */,
@@ -241,15 +384,37 @@
 				AB000000000000000000000F /* Utilities.swift in Sources */,
 				AB0000000000000000000010 /* AddPaperSheets.swift in Sources */,
 				AB0000000000000000000011 /* ContentView.swift in Sources */,
+				AB000000000000000000001B /* NativeLibraryView.swift in Sources */,
 				AB0000000000000000000012 /* PaperDetailView.swift in Sources */,
-				AB0000000000000000000013 /* PaperListView.swift in Sources */,
 				AB0000000000000000000014 /* SettingsView.swift in Sources */,
-				AB0000000000000000000015 /* SidebarView.swift in Sources */,
 				AB0000000000000000000016 /* ViewUtilities.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		135AEACD7C0B42BB91D5EB0E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0F918D5D66DFD9B61373BC4 /* ConnectorCore.swift in Sources */,
+				A21F31D299C01143F7EF4192 /* MCPServer.swift in Sources */,
+				1F2A4E78E8F9B3207CA8D5BF /* PaperManagerCLI.swift in Sources */,
+				26856B008B514A9004C54DBB /* Resources.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		AA785600574311E1454D610E /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				38D7C0841DDA5C4F937B9428 /* en */,
+				8FB43DBE0BB1F3EDC8F6D1DE /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		AC0000000000000000000003 /* Debug */ = {
@@ -370,7 +535,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 20261018;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -380,7 +545,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aurelian.PaperManager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -394,7 +559,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 20261018;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -404,10 +569,40 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aurelian.PaperManager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		7F04453DDC39BB46147CCAE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INSTALL_PATH = /usr/local/bin;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", );
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		FB68C4ADD4DA845CEE77A9A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INSTALL_PATH = /usr/local/bin;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", );
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -429,6 +624,15 @@
 			buildConfigurations = (
 				AC0000000000000000000005 /* Debug */,
 				AC0000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB6B56B451CC33A96E7FEE77 /* Build configuration list for PBXNativeTarget "PaperManagerCLI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7F04453DDC39BB46147CCAE6 /* Debug */,
+				FB68C4ADD4DA845CEE77A9A6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

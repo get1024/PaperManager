@@ -13,10 +13,15 @@ struct ContentView: View {
     @State private var showManualAdd = false
     @State private var showDOIAdd = false
     @State private var includeSubcollections = true
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var showSidebar = true
     @State private var showInspector = true
     @State private var sortDescriptor = PaperSortDescriptor.defaultValue
     @State private var focusSearchToken = 0
+    @State private var showAddPopover = false
+    @State private var pendingOpenPaperID: UUID?
+    @State private var importPlan: ImportPlan?
+    @State private var importTargetFilter: LibraryFilter?
+    @State private var isPreparingImport = false
 
     private var visiblePapers: [Paper] {
         store.filteredPapers(
@@ -43,86 +48,103 @@ struct ContentView: View {
         }
     }
 
-    var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(
-                selectedFilter: $selectedFilter,
-                searchText: $searchText,
-                includeSubcollections: $includeSubcollections,
-                focusSearchToken: focusSearchToken
-            )
-            .navigationSplitViewColumnWidth(min: 200, ideal: 226, max: 260)
-        } content: {
-            PaperListView(
-                title: selectedTitle,
-                papers: visiblePapers,
-                selection: $selectedPaperIDs,
-                searchText: $searchText,
-                onOpenSelected: openSelectedPDF,
-                onRevealSelected: revealSelectedPDF,
-                onDeleteSelected: deleteSelectedPapers,
-                onImportURLs: importURLs,
-                density: store.settings.tableDensity
-            )
-            .navigationTitle(selectedTitle)
-        } detail: {
-            VStack(spacing: 0) {
-                if showInspector {
-                    PaperDetailView(selection: $selectedPaperIDs)
-                } else {
-                    Color.clear
-                }
-            }
-            .navigationSplitViewColumnWidth(
-                min: showInspector ? 300 : 0,
-                ideal: showInspector ? 340 : 0,
-                max: showInspector ? 400 : 0
-            )
-        }
+    private var libraryView: some View {
+        NativeLibraryView(
+            store: store,
+            papers: visiblePapers,
+            selectedFilter: $selectedFilter,
+            selection: $selectedPaperIDs,
+            searchText: $searchText,
+            includeSubcollections: $includeSubcollections,
+            sortDescriptor: $sortDescriptor,
+            showSidebar: showSidebar,
+            showInspector: showInspector,
+            focusSearchToken: focusSearchToken,
+            onOpenSelected: openSelectedPDF,
+            onRevealSelected: revealSelectedPDF,
+            onDeleteSelected: deleteSelectedPapers,
+            onImportURLs: importURLs,
+            onRefreshMetadata: refreshMetadataForTargets,
+            onExportBibTeX: exportBibTeX,
+            onExportRIS: exportRIS,
+            onExportDetailed: exportDetailed
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .font(PMTypography.bodyRegular)
         .background(WindowChromeConfigurator { window in
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.styleMask.insert(.fullSizeContentView)
             window.isMovableByWindowBackground = true
+            window.contentMinSize = NSSize(width: 1080, height: 680)
         })
-        .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
+        .environment(\.locale, PMLocalization.locale(for: store.settings.languageIdentifier))
+        .navigationTitle(selectedTitle)
+        .focusedSceneValue(\.paperManagerWindowActions, windowActions)
+        .toolbar(removing: .sidebarToggle)
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .navigation) {
                 Menu {
-                    Button("导入文件...") { showImporter = true }
-                    Button("通过标识符添加...") { showDOIAdd = true }
-                    Button("手动添加...") { showManualAdd = true }
-                    Divider()
-                    Button("刷新元数据") { refreshMetadataForTargets() }
-                        .disabled(targetPapers.isEmpty || store.isBusy)
+                    Toggle("文库侧栏", isOn: $showSidebar)
+                    Toggle("论文检查器", isOn: $showInspector)
                 } label: {
+                    Label("面板", systemImage: "rectangle.split.3x1")
+                }
+                .labelStyle(.iconOnly)
+                .help("显示或隐藏文库侧栏和论文检查器")
+                .accessibilityIdentifier("main-toolbar-panels")
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { showAddPopover.toggle() } label: {
                     Label("添加", systemImage: "plus")
                 }
                 .labelStyle(.iconOnly)
+                .accessibilityIdentifier("main-toolbar-add")
+                .disabled(isPreparingImport)
+                .popover(isPresented: $showAddPopover, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("添加文献").font(.headline)
+                        Text("导入文件或通过元数据创建文献。")
+                            .foregroundStyle(.secondary)
+                        addAction("导入文件…", subtitle: "支持 PDF、BibTeX、RIS 或文件夹", icon: "doc.badge.plus") {
+                            showImporter = true
+                        }
+                        addAction("通过标识符添加…", subtitle: "支持 DOI、arXiv、ISBN 或标题", icon: "link") {
+                            showDOIAdd = true
+                        }
+                        addAction("手动添加…", subtitle: "通过输入元数据创建文献", icon: "square.and.pencil") {
+                            showManualAdd = true
+                        }
+                        Divider()
+                        addAction("从 Lattice 导入…", subtitle: "只读读取文献、文集、标签和 PDF 引用", icon: "tray.and.arrow.down") {
+                            importFromLattice()
+                        }
+                        .disabled(store.isBusy)
+                    }
+                    .padding(18)
+                    .frame(width: 310)
+                }
 
                 Menu {
                     Button("导出 BibTeX...") { exportBibTeX() }
                     Button("导出 RIS...") { exportRIS() }
                     Button("详细导出...") { exportDetailed() }
                     Divider()
-                    Button("复制 BibTeX") { ExportService.copyToPasteboard(ExportService.bibTeX(for: targetPapers)) }
-                    Button("复制 RIS") { ExportService.copyToPasteboard(ExportService.ris(for: targetPapers)) }
+                    Button("复制 BibTeX") { ExportService.copyToPasteboard(ExportService.bibTeX(for: targetPapers, settings: store.settings, tags: store.tags)) }
+                    Button("复制 RIS") { ExportService.copyToPasteboard(ExportService.ris(for: targetPapers, settings: store.settings, tags: store.tags)) }
                 } label: {
                     Label("导出", systemImage: "square.and.arrow.up")
                 }
                 .labelStyle(.iconOnly)
+                .accessibilityIdentifier("main-toolbar-export")
 
-                Button {
-                    showInspector.toggle()
-                } label: {
-                    Label(showInspector ? "隐藏检查器" : "显示检查器", systemImage: "sidebar.right")
-                }
-                .labelStyle(.iconOnly)
-                .help(showInspector ? "隐藏检查器" : "显示检查器")
             }
         }
+    }
+
+    var body: some View {
+        libraryView
         .fileImporter(
             isPresented: $showImporter,
             allowedContentTypes: [.pdf, .bibTeX, .ris, .folder],
@@ -133,11 +155,15 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showManualAdd) {
-            ManualPaperSheet(targetFilter: selectedFilter)
+            ManualPaperSheet(targetFilter: selectedFilter, onOpenExisting: focusPaper)
+                .environmentObject(store)
+        }
+        .sheet(item: $importPlan) { plan in
+            ImportPreviewView(plan: plan, targetFilter: importTargetFilter, onOpenExisting: focusPaper)
                 .environmentObject(store)
         }
         .sheet(isPresented: $showDOIAdd) {
-            DOISheet(targetFilter: selectedFilter)
+            DOISheet(targetFilter: selectedFilter, onOpenExisting: focusPaper)
                 .environmentObject(store)
         }
         .onAppear {
@@ -145,10 +171,27 @@ struct ContentView: View {
             showInspector = store.settings.showInspectorByDefault
         }
         .onChange(of: selectedFilter) { _, _ in
-            selectedPaperIDs.removeAll()
+            if let id = pendingOpenPaperID {
+                selectedPaperIDs = [id]
+                pendingOpenPaperID = nil
+            } else {
+                selectedPaperIDs.removeAll()
+            }
+        }
+        .onOpenURL(perform: openPaperURL)
+        .onChange(of: visiblePapers.map(\.id)) { _, ids in
+            selectedPaperIDs.formIntersection(Set(ids))
+        }
+        .onChange(of: store.collections.map(\.id)) { _, ids in
+            if case .collection(let id) = selectedFilter, !ids.contains(id) { selectedFilter = .all }
+        }
+        .onChange(of: store.tags.map(\.id)) { _, ids in
+            if case .tag(let id) = selectedFilter, !ids.contains(id) { selectedFilter = .all }
         }
         .onChange(of: store.settings) { _, _ in
             localAPI.reconfigure(with: store)
+        }
+        .onChange(of: store.settings.showInspectorByDefault) { _, _ in
             showInspector = store.settings.showInspectorByDefault
         }
         .onReceive(NotificationCenter.default.publisher(for: .paperManagerImportRequested)) { _ in
@@ -180,8 +223,60 @@ struct ContentView: View {
         }
     }
 
+    private var windowActions: PaperManagerWindowActions {
+        PaperManagerWindowActions(
+            importFiles: { showImporter = true }, addIdentifier: { showDOIAdd = true },
+            addManually: { showManualAdd = true }, focusSearch: { focusSearchToken += 1 },
+            openSelected: openSelectedPDF, quickLook: quickLookSelectedPDF,
+            revealSelected: revealSelectedPDF, deleteSelected: deleteSelectedPapers,
+            exportBibTeX: exportBibTeX, toggleSidebar: { showSidebar.toggle() },
+            toggleInspector: { showInspector.toggle() }, hasSelection: !selectedPaperIDs.isEmpty,
+            sidebarVisible: showSidebar, inspectorVisible: showInspector
+        )
+    }
+
+    private func openPaperURL(_ url: URL) {
+        guard url.scheme == "papermanager", url.host == "paper",
+              let id = UUID(uuidString: url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))),
+              store.paper(with: id) != nil else { return }
+        focusPaper(id)
+    }
+
     private var selectedPapers: [Paper] {
         visiblePapers.filter { selectedPaperIDs.contains($0.id) }
+    }
+
+    private func addAction(_ title: String, subtitle: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button {
+            showAddPopover = false
+            action()
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: icon).frame(width: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(PMLocalization.text(title))
+                    Text(PMLocalization.text(subtitle)).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func importFromLattice() {
+        store.isBusy = true
+        store.statusMessage = "正在只读读取 Lattice 文库…"
+        Task {
+            defer { store.isBusy = false }
+            do {
+                let summary = try await LatticeImportService.importFromRunningLattice(into: store)
+                store.statusMessage = ([summary.text] + summary.warnings).joined(separator: " ")
+            } catch {
+                store.statusMessage = "Lattice 导入失败：\(error.localizedDescription)"
+            }
+        }
     }
 
     private func openSelectedPDF() {
@@ -265,7 +360,21 @@ struct ContentView: View {
     }
 
     private func importURLs(_ urls: [URL]) {
-        Task { await ImportService.importURLs(urls, into: store, targetFilter: selectedFilter) }
+        guard !isPreparingImport else { return }
+        isPreparingImport = true
+        importTargetFilter = selectedFilter
+        store.statusMessage = "正在读取待导入文件…"
+        Task {
+            let plan = await ImportService.prepare(urls, store: store)
+            isPreparingImport = false
+            importPlan = plan
+        }
+    }
+
+    private func focusPaper(_ id: UUID) {
+        searchText = ""
+        if selectedFilter == .all { selectedPaperIDs = [id] }
+        else { pendingOpenPaperID = id; selectedFilter = .all }
     }
 
     private func refreshAnnotations(for paperID: UUID, attachment: Attachment) {
@@ -297,8 +406,10 @@ struct ContentView: View {
                         isbn: paper.isbn.nilIfBlank,
                         title: paper.title.nilIfBlank
                     )
-                    store.updatePaper(metadata.merged(into: paper, replaceExisting: false))
-                    updated += 1
+                    if let latest = store.paper(with: paper.id) {
+                        store.updatePaper(metadata.merged(into: latest, replaceExisting: false))
+                        updated += 1
+                    }
                 } catch {
                     failed += 1
                 }
@@ -319,7 +430,7 @@ struct ContentView: View {
     private func exportBibTeX() {
         guard let url = DialogService.saveURL(title: "导出 BibTeX", name: "PaperManager.bib", types: [.bibTeX]) else { return }
         do {
-            try ExportService.writeBibTeX(targetPapers, to: url)
+            try ExportService.writeBibTeX(targetPapers, to: url, settings: store.settings, tags: store.tags)
             store.statusMessage = "导出完成。"
         } catch {
             store.statusMessage = "导出失败：\(error.localizedDescription)"
@@ -329,7 +440,7 @@ struct ContentView: View {
     private func exportRIS() {
         guard let url = DialogService.saveURL(title: "导出 RIS", name: "PaperManager.ris", types: [.ris]) else { return }
         do {
-            try ExportService.writeRIS(targetPapers, to: url)
+            try ExportService.writeRIS(targetPapers, to: url, settings: store.settings, tags: store.tags)
             store.statusMessage = "导出完成。"
         } catch {
             store.statusMessage = "导出失败：\(error.localizedDescription)"

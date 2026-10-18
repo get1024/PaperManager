@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>保存到 PaperManager</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <header><h1>保存到 PaperManager</h1><span id="connection" role="status">正在连接…</span></header>
+  <form id="save-form">
+    <label>标题<textarea id="title" rows="2" required></textarea></label>
+    <label>作者<span class="hint">每行一位</span><textarea id="authors" rows="2"></textarea></label>
+    <div class="pair"><label>年份<input id="year" inputmode="numeric"></label><label>类型<select id="type"></select></label></div>
+    <label>来源<input id="journal"></label>
+    <label>DOI<input id="doi"></label>
+    <details><summary>其他元数据</summary><label>预印本编号<input id="eprint"></label><label>ISBN<input id="isbn"></label><label>URL<input id="url"></label><label>摘要<textarea id="abstract" rows="3"></textarea></label></details>
+    <div class="pair"><label>文集<select id="collections" multiple size="3"></select></label><label>标签<select id="tags" multiple size="3"></select></label></div>
+    <label>重复记录<select id="strategy"><option value="skip">跳过已有记录</option><option value="replace">替换已有记录的传入字段</option></select></label>
+    <fieldset><legend>PDF（可选）</legend><p id="file-state" class="hint">读取文件库状态…</p><label><input id="page-pdf" type="checkbox">附加当前页面可访问的 PDF</label><label>或选择已下载的 PDF<input id="pdf-file" type="file" accept="application/pdf,.pdf"></label><label><input id="replace-pdf" type="checkbox">替换已有主 PDF</label></fieldset>
+    <button id="save" type="submit" disabled>保存文献</button>
+  </form>
+  <p id="result" role="status" aria-live="polite"></p>
+  <details><summary>连接设置</summary><label>本地 API 端口<input id="port" type="number" min="1024" max="65535" value="29467"></label><button id="reconnect" type="button">重新连接</button><p class="hint">在 PaperManager 设置中启用本地 API，并使用页面显示的端口。仅连接本机。</p></details>
+  <script type="module" src="popup.mjs"></script>
+</body></html>

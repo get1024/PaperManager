@@ -2,6 +2,8 @@
 Icon?
 
 .build/
+dist/
+LocalData/
 .swiftpm/
 .vscode/
 
@@ -12,3 +14,12 @@ xcuserdata/
 *.moved-aside
 *.xccheckout
 *.xcscmblueprint
+
+# Personal documents, backups and credentials must stay outside source control.
+*.lattice
+*.papermanager
+*.pdf
+.env
+.env.*
+*.p12
+*.mobileprovision

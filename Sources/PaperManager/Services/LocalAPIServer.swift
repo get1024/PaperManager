@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import Network
+import PDFKit
 
 @MainActor
 final class LocalAPIServer: ObservableObject {
@@ -9,6 +10,8 @@ final class LocalAPIServer: ObservableObject {
 
     private var listener: NWListener?
     private var activePort: Int?
+    private var enrichmentTasks: [UUID: Task<Void, Never>] = [:]
+    private var enrichmentGenerations: [UUID: UUID] = [:]
     private let queue = DispatchQueue(label: "PaperManager.LocalAPI")
 
     func reconfigure(with store: LibraryStore) {
@@ -27,6 +30,9 @@ final class LocalAPIServer: ObservableObject {
     }
 
     func stop() {
+        enrichmentTasks.values.forEach { $0.cancel() }
+        enrichmentTasks.removeAll()
+        enrichmentGenerations.removeAll()
         listener?.cancel()
         listener = nil
         activePort = nil
@@ -35,14 +41,16 @@ final class LocalAPIServer: ObservableObject {
 
     private func start(port: Int, store: LibraryStore) {
         do {
-            guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+            guard (1...65535).contains(port), let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
                 statusText = "Invalid port"
                 return
             }
             let parameters = NWParameters.tcp
             parameters.allowLocalEndpointReuse = true
             parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(IPv4Address("127.0.0.1")!), port: nwPort)
-            let listener = try NWListener(using: parameters, on: nwPort)
+            // The required endpoint already supplies the address and port.
+            // Passing a second port to NWListener conflicts with it (EINVAL).
+            let listener = try NWListener(using: parameters)
             listener.newConnectionHandler = { [weak self, weak store] connection in
                 guard let self, let store else { return }
                 self.handle(connection: connection, store: store)
@@ -83,20 +91,21 @@ final class LocalAPIServer: ObservableObject {
             var nextBuffer = buffer
             if let data { nextBuffer.append(data) }
 
-            if let request = HTTPRequest(data: nextBuffer) {
+            switch HTTPRequest.parse(data: nextBuffer) {
+            case .request(let request):
                 Task { @MainActor in
-                    let response = await self.route(request, store: store)
+                    let response = await self.respond(to: request, store: store)
                     self.send(response, on: connection)
                 }
                 return
-            }
-
-            if isComplete || error != nil {
-                self.send(.plain(status: 400, text: "Bad Request"), on: connection)
-            } else if nextBuffer.count > 220 * 1024 * 1024 {
-                self.send(.plain(status: 413, text: "Payload too large"), on: connection)
-            } else {
-                self.receive(connection: connection, store: store, buffer: nextBuffer)
+            case .invalid(let status, let message):
+                self.send(.json(status: status, object: ["error": message]), on: connection)
+            case .incomplete:
+                if isComplete || error != nil {
+                    self.send(.plain(status: 400, text: "Bad Request"), on: connection)
+                } else {
+                    self.receive(connection: connection, store: store, buffer: nextBuffer)
+                }
             }
         }
     }
@@ -105,6 +114,37 @@ final class LocalAPIServer: ObservableObject {
         connection.send(content: response.data, completion: .contentProcessed { _ in
             connection.cancel()
         })
+    }
+
+    private func respond(to request: HTTPRequest, store: LibraryStore) async -> HTTPResponse {
+        let origin = request.headers["origin"]
+        if let origin, !Self.isAllowedOrigin(origin, port: store.settings.localAPIPort) {
+            return .json(status: 403, object: ["error": "Origin not allowed"])
+        }
+        var response = await route(request, store: store)
+        response.allowedOrigin = origin
+        return response
+    }
+
+    // CLI clients do not send Origin. Browser clients must be the loopback
+    // service itself or a supported extension; web pages cannot access a library.
+    private static func isAllowedOrigin(_ origin: String, port: Int) -> Bool {
+        guard let components = URLComponents(string: origin),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(),
+              components.user == nil, components.password == nil,
+              components.path.isEmpty, components.query == nil, components.fragment == nil else { return false }
+        switch scheme {
+        case "http":
+            return ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host)
+                && (components.port ?? 80) == port
+        case "chrome-extension":
+            return components.port == nil && host.count == 32 && host.utf8.allSatisfy { (97...112).contains($0) }
+        case "safari-web-extension":
+            return components.port == nil && UUID(uuidString: host) != nil
+        default:
+            return false
+        }
     }
 
     private func route(_ request: HTTPRequest, store: LibraryStore) async -> HTTPResponse {
@@ -119,9 +159,8 @@ final class LocalAPIServer: ObservableObject {
         if (isPublicAPI || isConnector), store.settings.localAPIReadOnly, request.method != "GET" {
             return .json(status: 403, object: ["error": "Read-Only Mode is enabled."])
         }
-        if isConnector, path != "/connector/status", !store.settings.browserExtensionEnabled {
-            return .json(status: 403, object: ["error": "Browser Extension is disabled."])
-        }
+        // Lattice 3.0 makes browser integrations available with Local API;
+        // there is no second independent extension-enabled policy.
 
         switch (request.method, path) {
         case ("GET", "/connector/status"), ("GET", "/api/v1/status"):
@@ -132,18 +171,29 @@ final class LocalAPIServer: ObservableObject {
             return .json(object: ["tags": tagsPayload(store: store)])
         case ("GET", "/connector/metadata"), ("GET", "/api/v1/metadata"):
             return await metadataResponse(request: request)
+        case ("GET", "/api/v1/search"):
+            return searchResponse(request: request, store: store)
+        case ("GET", "/api/v1/papers/by-citekey"):
+            guard let key = request.query["key"]?.nilIfBlank else {
+                return .json(status: 400, object: ["error": "An exact citekey is required"])
+            }
+            // Return every exact match. The official CLI rejects ambiguous
+            // matches rather than silently picking an arbitrary record.
+            let matches = store.papers.filter { $0.citekey.trimmed.caseInsensitiveCompare(key) == .orderedSame }
+            return .json(object: ["papers": matches.map(lightweightPaperPayload)])
         case ("POST", "/connector/papers"), ("POST", "/api/v1/papers"):
             return await createPaperResponse(request: request, store: store)
         case ("GET", "/api/v1/papers"):
             return .json(object: ["papers": store.papers.map(lightweightPaperPayload)])
         default:
-            if request.method == "PUT", path.hasPrefix("/connector/papers/"), path.hasSuffix("/pdf") {
+            if request.method == "PUT",
+               (path.hasPrefix("/connector/papers/") || path.hasPrefix("/api/v1/papers/")), path.hasSuffix("/pdf") {
                 return uploadPDFResponse(request: request, store: store)
             }
             if request.method == "GET", path.hasPrefix("/api/v1/papers/") {
                 let idPart = path.replacingOccurrences(of: "/api/v1/papers/", with: "")
                 if let id = UUID(uuidString: idPart), let paper = store.paper(with: id) {
-                    return .json(object: detailPayload(paper: paper, store: store))
+                    return .json(object: detailPayload(paper: paper, store: store, includes: request.query["include"] ?? ""))
                 }
                 return .json(status: 404, object: ["error": "Paper not found"])
             }
@@ -153,24 +203,46 @@ final class LocalAPIServer: ObservableObject {
 
     private func statusResponse(store: LibraryStore) -> HTTPResponse {
         let baseURL = "http://127.0.0.1:\(store.settings.localAPIPort)"
+        let fileLibrary = FileLibraryService.status(for: store.settings)
+        var capabilities = ["search", "paper-detail", "csl-item", "collections", "tags", "metadata-lookup"]
+        if !store.settings.localAPIReadOnly {
+            capabilities.append("create-paper")
+            if fileLibrary.isAvailable {
+                capabilities.append("pdf-upload")
+            }
+        }
         return .json(object: [
             "ok": true,
             "apiVersion": "1",
             "serverVersion": "PaperManager 1.0",
             "appVersion": "PaperManager 1.0",
             "readOnly": store.settings.localAPIReadOnly,
-            "browserExtensionEnabled": store.settings.browserExtensionEnabled,
+            "browserExtensionEnabled": true,
+            "fileLibrary": ["state": fileLibrary.availability.rawValue, "available": fileLibrary.isAvailable,
+                             "rootPath": fileLibrary.rootURL?.path as Any, "message": fileLibrary.message],
             "baseURL": baseURL,
-            "capabilities": [
-                "papers",
-                "collections",
-                "tags",
-                "metadata",
-                "pdf-upload",
-                "bibtex-export",
-                "ris-export"
-            ]
+            "capabilities": capabilities
         ])
+    }
+
+    private func searchResponse(request: HTTPRequest, store: LibraryStore) -> HTTPResponse {
+        let limit: Int
+        if let value = request.query["limit"] {
+            guard let requested = Int(value), requested > 0 else {
+                return .json(status: 400, object: ["error": "limit must be a positive integer"])
+            }
+            limit = min(requested, 50)
+        } else { limit = 10 }
+        let terms = (request.query["q"] ?? "").folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        let matches = store.papers.filter { paper in
+            let text = [paper.title, paper.authors.joined(separator: " "), paper.sourceDisplay, paper.citekey, paper.year.map(String.init) ?? ""]
+                .joined(separator: " ").folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            return terms.allSatisfy { text.contains($0) }
+        }.sorted { lhs, rhs in
+            lhs.dateAdded == rhs.dateAdded ? lhs.id.uuidString < rhs.id.uuidString : lhs.dateAdded > rhs.dateAdded
+        }
+        return .json(object: ["papers": matches.prefix(limit).map(lightweightPaperPayload)])
     }
 
     private func metadataResponse(request: HTTPRequest) async -> HTTPResponse {
@@ -191,50 +263,64 @@ final class LocalAPIServer: ObservableObject {
     private func createPaperResponse(request: HTTPRequest, store: LibraryStore) async -> HTTPResponse {
         do {
             let payload = try JSONDecoder().decode(CreatePaperPayload.self, from: request.body)
-            var paper = payload.paper
-            if payload.enrich == true, let metadata = try? await MetadataLookupClient.lookup(
-                doi: paper.doi,
-                arxivID: paper.eprint,
-                isbn: paper.isbn,
-                title: paper.title
-            ) {
-                paper = metadata.merged(into: paper)
-            }
-
-            for collectionName in payload.collections ?? [] {
-                if let id = collectionID(forPath: collectionName, store: store) {
-                    paper.collectionIDs.append(id)
-                }
-            }
-            for tagName in payload.tags ?? [] {
-                if let id = tagID(named: tagName, store: store) {
-                    paper.tagIDs.append(id)
-                }
-            }
-
-            if let duplicateID = store.duplicatePaperID(for: paper), payload.strategy != "replace" {
+            try payload.validate()
+            let incoming = payload.paper
+            let duplicateID = store.duplicatePaperID(for: incoming)
+            if let duplicateID, payload.strategy != "replace" {
                 let existing = store.paper(with: duplicateID)
                 return .json(status: 409, object: [
                     "error": "Duplicate paper.",
+                    "alreadyExists": true,
                     "existingPaperID": duplicateID.uuidString,
                     "existingTitle": existing?.displayTitle ?? "",
-                    "conflictField": paper.doi.isEmpty ? "title" : "doi",
+                    "conflictField": incoming.doi.isEmpty ? "title" : "doi",
                     "paperManagerURL": "papermanager://paper/\(duplicateID.uuidString)",
                     "latticeURL": "papermanager://paper/\(duplicateID.uuidString)"
                 ])
             }
-
-            let id = store.addOrReplacePaper(paper, replaceDuplicate: payload.strategy == "replace")
+            var paper = incoming
+            if let duplicateID, let existing = store.paper(with: duplicateID) {
+                paper = try payload.applyingMetadata(to: existing)
+            }
+            var warnings: [String] = []
+            if payload.pdfPath?.nilIfBlank != nil {
+                warnings.append("A local PDF path was not attached. Use the PDF upload endpoint to copy a readable PDF into the configured File Library.")
+            }
+            for collectionName in payload.collections ?? [] {
+                if let id = collectionID(forPath: collectionName, store: store), !paper.collectionIDs.contains(id) {
+                    paper.collectionIDs.append(id)
+                } else if collectionID(forPath: collectionName, store: store) == nil {
+                    warnings.append("Collection not found: \(collectionName)")
+                }
+            }
+            for tagName in payload.tags ?? [] {
+                if let id = tagID(named: tagName, store: store), !paper.tagIDs.contains(id) {
+                    paper.tagIDs.append(id)
+                }
+            }
+            let id: UUID
+            do {
+                if let duplicateID {
+                    try store.updatePaperDurably(paper)
+                    id = duplicateID
+                } else {
+                    id = try store.addPaperDurably(paper)
+                }
+            } catch {
+                return .json(status: 500, object: ["error": error.localizedDescription])
+            }
             let saved = store.paper(with: id) ?? paper
+            if payload.enrich == true { enqueueEnrichment(for: saved, store: store) }
             return .json(object: [
                 "id": id.uuidString,
                 "title": saved.displayTitle,
-                "authors": saved.authorsText,
+                "authors": saved.authors,
                 "year": saved.year as Any,
                 "doi": saved.doi,
                 "pdfAttached": saved.hasPDF,
-                "enrichmentStatus": payload.enrich == true ? "attempted" : "none",
-                "warnings": [],
+                "enrichmentStatus": payload.enrich == true ? "pending" : "none",
+                "alreadyExists": duplicateID != nil,
+                "warnings": warnings,
                 "paperManagerURL": "papermanager://paper/\(id.uuidString)",
                 "latticeURL": "papermanager://paper/\(id.uuidString)"
             ])
@@ -243,36 +329,63 @@ final class LocalAPIServer: ObservableObject {
         }
     }
 
+    private func enqueueEnrichment(for paper: Paper, store: LibraryStore) {
+        enrichmentTasks[paper.id]?.cancel()
+        let generation = UUID()
+        enrichmentGenerations[paper.id] = generation
+        enrichmentTasks[paper.id] = Task { [weak self, weak store] in
+            defer {
+                if self?.enrichmentGenerations[paper.id] == generation {
+                    self?.enrichmentTasks.removeValue(forKey: paper.id)
+                    self?.enrichmentGenerations.removeValue(forKey: paper.id)
+                }
+            }
+            guard let metadata = try? await MetadataLookupClient.lookup(doi: paper.doi.nilIfBlank, arxivID: paper.arxivLookupID, isbn: paper.isbn.nilIfBlank, title: paper.title.nilIfBlank),
+                  !Task.isCancelled, let store, let latest = store.paper(with: paper.id) else { return }
+            // A delayed provider result may fill gaps, never erase intervening
+            // local edits, memberships, attachments, ratings or annotations.
+            do { try store.updatePaperDurably(metadata.merged(into: latest)) }
+            catch { store.statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription) }
+        }
+    }
+
     private func uploadPDFResponse(request: HTTPRequest, store: LibraryStore) -> HTTPResponse {
-        guard request.body.count <= 200 * 1024 * 1024 else {
+        guard request.body.count <= 200_000_000 else {
             return .json(status: 413, object: ["error": "PDF exceeds the 200MB upload limit."])
         }
         let path = request.path
         let stripped = path
             .replacingOccurrences(of: "/connector/papers/", with: "")
+            .replacingOccurrences(of: "/api/v1/papers/", with: "")
             .replacingOccurrences(of: "/pdf", with: "")
         guard let id = UUID(uuidString: stripped), let paper = store.paper(with: id) else {
             return .json(status: 404, object: ["error": "Paper not found"])
         }
+        guard request.headers["content-type"]?.components(separatedBy: ";").first?.trimmed.lowercased() == "application/pdf" else {
+            return .json(status: 400, object: ["error": "Content-Type must be application/pdf"])
+        }
+        guard request.body.starts(with: Data("%PDF-".utf8)), let document = PDFDocument(data: request.body), document.pageCount > 0 else {
+            return .json(status: 400, object: ["error": "Invalid PDF payload"])
+        }
+        let force = request.query["force"]?.lowercased() == "true"
+        if paper.primaryPDF != nil, !force {
+            return .json(status: 409, object: ["error": "PDF already attached", "existingPaperID": id.uuidString])
+        }
 
-        let folderPath = store.settings.browserUploadFolder.nilIfBlank ?? store.settings.pdfOrganizationFolder
-        guard let folderPath = folderPath.nilIfBlank else {
-            return .json(status: 503, object: ["error": "PaperManager is not configured to accept PDF uploads."])
+        let fileLibrary = FileLibraryService.status(for: store.settings)
+        guard fileLibrary.isAvailable else {
+            return .json(status: 503, object: ["error": fileLibrary.message, "fileLibraryState": fileLibrary.availability.rawValue])
         }
 
         do {
-            let folder = URL(fileURLWithPath: folderPath, isDirectory: true)
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("PaperManager-upload-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: temporary) }
             let baseName = (paper.citekey.nilIfBlank ?? paper.displayTitle).sanitizedFileName()
-            var url = folder.appendingPathComponent(baseName).appendingPathExtension("pdf")
-            var suffix = 2
-            while FileManager.default.fileExists(atPath: url.path) {
-                url = folder.appendingPathComponent("\(baseName) \(suffix)").appendingPathExtension("pdf")
-                suffix += 1
-            }
+            let url = temporary.appendingPathComponent(baseName).appendingPathExtension("pdf")
             try request.body.write(to: url, options: [.atomic])
-            try store.attachFile(url, to: id, kind: .pdf)
-            return .json(object: ["ok": true, "id": id.uuidString, "pdfAttached": true])
+            try store.attachManagedFile(url, to: id, kind: .pdf, replacePrimary: force)
+            return .json(object: ["ok": true, "reason": "uploaded", "id": id.uuidString, "pdfAttached": store.paper(with: id)?.hasPDF == true])
         } catch {
             return .json(status: 500, object: ["error": error.localizedDescription])
         }
@@ -288,9 +401,7 @@ final class LocalAPIServer: ObservableObject {
                 currentID = existing.id
                 parentID = existing.id
             } else {
-                let newID = store.addCollection(name: part, parentID: parentID)
-                currentID = newID
-                parentID = newID
+                return nil
             }
         }
         return currentID
@@ -338,6 +449,8 @@ final class LocalAPIServer: ObservableObject {
                 .filter { !$0.isEmpty && $0 != "No authors" }
                 .joined(separator: ", "),
             "authors": paper.authors,
+            "authorsDisplay": paper.authorsDisplay,
+            "paperType": paper.paperType.rawValue.lowercased(),
             "year": paper.year as Any,
             "source": paper.sourceDisplay,
             "doi": paper.doi,
@@ -348,58 +461,78 @@ final class LocalAPIServer: ObservableObject {
         ]
     }
 
-    private func detailPayload(paper: Paper, store: LibraryStore) -> [String: Any] {
+    private func detailPayload(paper: Paper, store: LibraryStore, includes: String) -> [String: Any] {
         var payload = lightweightPaperPayload(paper)
         payload["type"] = paper.paperType.rawValue
-        payload["paperType"] = paper.paperType.rawValue
-        payload["subtitle"] = paper.subtitle ?? ""
-        payload["editors"] = paper.editors ?? []
-        payload["translators"] = paper.translators ?? []
-        payload["abstract"] = paper.abstract
-        payload["notes"] = paper.notes
-        payload["rating"] = paper.rating
-        payload["dateAdded"] = paper.dateAdded
-        payload["csl"] = metadataPayload(PaperMetadata(
-            title: paper.title,
-            subtitle: paper.subtitle ?? "",
-            authors: paper.authors,
-            editors: paper.editors ?? [],
-            translators: paper.translators ?? [],
-            year: paper.year,
-            paperType: paper.paperType,
-            journal: paper.journal,
-            bookTitle: paper.bookTitle,
-            publisher: paper.publisher,
-            address: paper.address ?? "",
-            volume: paper.volume,
-            issue: paper.issue,
-            pages: paper.pages,
-            doi: paper.doi,
-            isbn: paper.isbn,
-            url: paper.url,
-            urlDate: paper.urlDate ?? "",
-            abstract: paper.abstract,
-            edition: paper.edition,
-            series: paper.series,
-            chapter: paper.chapter,
-            institution: paper.institution,
-            school: paper.school,
-            type: paper.type ?? "",
-            howPublished: paper.howPublished,
-            organization: paper.organization ?? "",
-            language: paper.language,
-            month: paper.month,
-            eprint: paper.eprint,
-            eprintType: paper.eprintType,
-            eprintClass: paper.eprintClass,
-            publicationState: paper.publicationState,
-            eventTitle: paper.event,
-            eventDate: paper.eventDate,
-            venue: paper.venue
-        ))
-        payload["collections"] = paper.collectionIDs.map { store.collections.path(for: $0) }
-        payload["tags"] = paper.tagIDs.compactMap { id in store.tags.first(where: { $0.id == id })?.name }
+        payload["paperType"] = paper.paperType.rawValue.lowercased()
+        payload["journal"] = paper.journal
+        payload["volume"] = paper.volume
+        payload["issue"] = paper.issue
+        payload["pages"] = paper.pages
+        payload["isbn"] = paper.isbn
+        payload["cslItem"] = cslItem(for: paper)
+        let fields = Set(includes.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        if fields.contains("abstract") { payload["abstract"] = paper.abstract.nilIfBlank as Any }
+        if fields.contains("library") || fields.contains("collections") {
+            payload["collections"] = collectionsPayload(store: store).filter { item in
+                guard let id = item["id"] as? String, let uuid = UUID(uuidString: id) else { return false }
+                return paper.collectionIDs.contains(uuid)
+            }
+        }
+        if fields.contains("library") || fields.contains("tags") {
+            payload["tags"] = tagsPayload(store: store).filter { item in
+                guard let id = item["id"] as? String, let uuid = UUID(uuidString: id) else { return false }
+                return paper.tagIDs.contains(uuid)
+            }
+        }
+        if fields.contains("pdfpath") || fields.contains("pdf_path") {
+            var path: String?
+            if let attachment = paper.primaryPDF {
+                path = try? attachment.withResolvedURL { url in
+                    FileManager.default.isReadableFile(atPath: url.path) ? url.path : nil
+                }
+            }
+            payload["pdfPath"] = path as Any
+        }
         return payload
+    }
+
+    // The independent library stores typed bibliography fields rather than an
+    // opaque provider CSL record. This mapping is deterministic and usable by
+    // CSL processors; it does not claim to reproduce unrecovered provider keys.
+    private func cslItem(for paper: Paper) -> [String: Any] {
+        let types = ["article": "article-journal", "book": "book", "inbook": "chapter", "incollection": "chapter",
+                     "inproceedings": "paper-conference", "proceedings": "book", "thesis": "thesis", "phdthesis": "thesis",
+                     "mastersthesis": "thesis", "report": "report", "techreport": "report", "online": "webpage",
+                     "dataset": "dataset", "software": "software", "patent": "patent", "manuscript": "manuscript",
+                     "unpublished": "manuscript", "preprint": "article", "misc": "article"]
+        var item: [String: Any] = ["id": paper.citekey.nilIfBlank ?? paper.id.uuidString,
+                                   "type": types[paper.paperType.rawValue.lowercased()] ?? types[paper.paperType.bibTeXType] ?? "article",
+                                   "title": paper.title]
+        if !paper.authors.isEmpty { item["author"] = paper.authors.map(cslName) }
+        if let editors = paper.editors, !editors.isEmpty { item["editor"] = editors.map(cslName) }
+        if let translators = paper.translators, !translators.isEmpty { item["translator"] = translators.map(cslName) }
+        if let year = paper.year { item["issued"] = ["date-parts": [[year]]] }
+        let values = [("container-title", paper.bookTitle.nilIfBlank ?? paper.journal), ("publisher", paper.publisher),
+                      ("publisher-place", paper.address ?? ""), ("volume", paper.volume), ("issue", paper.issue), ("page", paper.pages),
+                      ("DOI", paper.doi), ("ISBN", paper.isbn), ("URL", paper.url), ("abstract", paper.abstract),
+                      ("edition", paper.edition), ("collection-title", paper.series), ("language", paper.language),
+                      ("event-title", paper.event), ("event-place", paper.venue)]
+        for (key, value) in values where !value.trimmed.isEmpty { item[key] = value }
+        return item
+    }
+
+    private func cslName(_ name: String) -> [String: String] {
+        let clean = name.trimmed
+        if clean.hasPrefix("{"), clean.hasSuffix("}") { return ["literal": String(clean.dropFirst().dropLast())] }
+        if let comma = clean.firstIndex(of: ",") {
+            let family = String(clean[..<comma]).trimmed
+            let given = String(clean[clean.index(after: comma)...]).trimmed
+            return given.isEmpty ? ["family": family] : ["family": family, "given": given]
+        }
+        let components = clean.split(whereSeparator: { $0.isWhitespace })
+        guard components.count > 1, let family = components.last else { return ["family": clean] }
+        return ["family": String(family), "given": components.dropLast().joined(separator: " ")]
     }
 
     private func metadataPayload(_ metadata: PaperMetadata) -> [String: Any] {
@@ -446,12 +579,34 @@ final class LocalAPIServer: ObservableObject {
     }
 }
 
-private struct CreatePaperPayload: Decodable {
+private struct APINames: Codable {
+    var values: [String]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let names = try? container.decode([String].self) {
+            guard !names.isEmpty, names.allSatisfy({ !$0.trimmed.isEmpty }) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Authors must be a non-empty array of non-empty names")
+            }
+            values = names.map(\.trimmed)
+        } else {
+            let text = try container.decode(String.self)
+            values = text.components(separatedBy: ";").map(\.trimmed).filter { !$0.isEmpty }
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(values)
+    }
+}
+
+private struct CreatePaperPayload: Codable {
     var title: String
     var subtitle: String?
-    var authors: String?
-    var editors: String?
-    var translators: String?
+    var authors: APINames?
+    var editors: APINames?
+    var translators: APINames?
     var year: Int?
     var journal: String?
     var bookTitle: String?
@@ -492,14 +647,56 @@ private struct CreatePaperPayload: Decodable {
     var tags: [String]?
     var enrich: Bool?
     var strategy: String?
+    var pdfPath: String?
+
+    func validate() throws {
+        guard !title.trimmed.isEmpty, title.utf8.count <= 1_024 else {
+            throw PaperManagerError.message("title must contain 1 to 1024 UTF-8 bytes")
+        }
+        guard (authors?.values.joined(separator: "; ").utf8.count ?? 0) <= 16_384 else {
+            throw PaperManagerError.message("authors exceeds 16384 UTF-8 bytes")
+        }
+        guard (abstract?.utf8.count ?? 0) <= 65_536 else {
+            throw PaperManagerError.message("abstract exceeds 65536 UTF-8 bytes")
+        }
+        for (name, values) in [("collections", collections ?? []), ("tags", tags ?? [])] {
+            guard values.count <= 100, values.allSatisfy({ !$0.trimmed.isEmpty && $0.utf8.count <= 256 }) else {
+                throw PaperManagerError.message("\(name) must contain at most 100 non-empty values, each at most 256 UTF-8 bytes")
+            }
+        }
+        if let strategy, !["skip", "replace"].contains(strategy) {
+            throw PaperManagerError.message("strategy must be skip or replace")
+        }
+        if let paperType {
+            let active = ["article", "book", "inbook", "incollection", "inproceedings", "proceedings", "thesis", "report", "online", "dataset", "software", "patent", "manuscript", "preprint", "misc"]
+            guard active.contains(paperType.lowercased()) || PaperType(rawValue: paperType) != nil else {
+                throw PaperManagerError.message("Unsupported paperType")
+            }
+        }
+    }
+
+    func applyingMetadata(to existing: Paper) throws -> Paper {
+        let encoder = JSONEncoder()
+        let supplied = try JSONSerialization.jsonObject(with: encoder.encode(self)) as! [String: Any]
+        let incoming = try JSONSerialization.jsonObject(with: encoder.encode(paper)) as! [String: Any]
+        var merged = try JSONSerialization.jsonObject(with: encoder.encode(existing)) as! [String: Any]
+        let aliases = [
+            "booktitle": "bookTitle", "howpublished": "howPublished", "pubState": "publicationState", "eventTitle": "event"
+        ]
+        for key in supplied.keys where !["collections", "tags", "enrich", "strategy", "pdfPath"].contains(key) {
+            let paperKey = aliases[key] ?? key
+            merged[paperKey] = incoming[paperKey]
+        }
+        return try JSONDecoder().decode(Paper.self, from: JSONSerialization.data(withJSONObject: merged))
+    }
 
     var paper: Paper {
         var paper = Paper()
         paper.title = title
         paper.subtitle = subtitle?.nilIfBlank
-        paper.authorsText = authors ?? ""
-        paper.editorsText = editors ?? ""
-        paper.translatorsText = translators ?? ""
+        paper.authors = authors?.values ?? []
+        paper.editors = editors?.values
+        paper.translators = translators?.values
         paper.year = year
         paper.journal = journal ?? ""
         paper.bookTitle = bookTitle ?? booktitle ?? ""
@@ -545,36 +742,90 @@ private struct HTTPRequest {
     var headers: [String: String]
     var body: Data
 
-    init?(data: Data) {
-        guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else { return nil }
+    private static let maximumHeaderLength = 64 * 1024
+    private static let maximumBodyLength = 200_000_000
+
+    enum ParseResult {
+        case incomplete
+        case request(HTTPRequest)
+        case invalid(status: Int, message: String)
+    }
+
+    static func parse(data: Data) -> ParseResult {
+        guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)) else {
+            return data.count > maximumHeaderLength
+                ? .invalid(status: 431, message: "Request headers too large") : .incomplete
+        }
+        guard headerRange.lowerBound <= maximumHeaderLength else {
+            return .invalid(status: 431, message: "Request headers too large")
+        }
         let headerData = data[..<headerRange.lowerBound]
-        guard let headerText = String(data: headerData, encoding: .utf8) else { return nil }
+        guard let headerText = String(data: headerData, encoding: .utf8) else {
+            return .invalid(status: 400, message: "Invalid request headers")
+        }
         let lines = headerText.components(separatedBy: "\r\n")
-        guard let requestLine = lines.first else { return nil }
+        guard let requestLine = lines.first else { return .invalid(status: 400, message: "Invalid request line") }
         let requestParts = requestLine.split(separator: " ")
-        guard requestParts.count >= 2 else { return nil }
+        guard requestParts.count == 3,
+              ["HTTP/1.0", "HTTP/1.1"].contains(String(requestParts[2])),
+              requestParts[0].utf8.allSatisfy(isTokenByte),
+              requestParts[1].hasPrefix("/") else {
+            return .invalid(status: 400, message: "Invalid request line")
+        }
 
         var headers: [String: String] = [:]
         for line in lines.dropFirst() {
-            guard let colon = line.firstIndex(of: ":") else { continue }
+            guard let colon = line.firstIndex(of: ":") else {
+                return .invalid(status: 400, message: "Invalid request header")
+            }
             let key = String(line[..<colon]).lowercased()
-            let value = String(line[line.index(after: colon)...]).trimmed
+            let rawValue = String(line[line.index(after: colon)...])
+            guard !key.isEmpty, key.utf8.allSatisfy(isTokenByte),
+                  !rawValue.unicodeScalars.contains(where: { $0.value < 32 && $0.value != 9 || $0.value == 127 }),
+                  headers[key] == nil else {
+                return .invalid(status: 400, message: "Invalid or duplicate request header")
+            }
+            let value = rawValue.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
             headers[key] = value
+        }
+        guard requestParts[2] != "HTTP/1.1" || headers["host"]?.nilIfBlank != nil else {
+            return .invalid(status: 400, message: "Host header required")
+        }
+        guard headers["transfer-encoding"] == nil else {
+            return .invalid(status: 400, message: "Transfer-Encoding is not supported; use Content-Length")
         }
 
         let bodyStart = headerRange.upperBound
-        let expectedLength = Int(headers["content-length"] ?? "0") ?? 0
-        guard data.count - bodyStart >= expectedLength else { return nil }
+        let lengthText = headers["content-length"] ?? "0"
+        guard !lengthText.isEmpty, lengthText.utf8.allSatisfy({ (48...57).contains($0) }) else {
+            return .invalid(status: 400, message: "Invalid Content-Length")
+        }
+        guard let expectedLength = Int(lengthText), expectedLength <= maximumBodyLength else {
+            return .invalid(status: 413, message: "Payload too large")
+        }
+        guard data.count - bodyStart >= expectedLength else { return .incomplete }
 
-        method = String(requestParts[0])
         let rawTarget = String(requestParts[1])
-        let components = URLComponents(string: "http://127.0.0.1\(rawTarget)")
-        path = components?.path ?? rawTarget
-        query = Dictionary(uniqueKeysWithValues: components?.queryItems?.compactMap { item in
-            item.value.map { (item.name, $0) }
-        } ?? [])
-        self.headers = headers
-        body = data.subdata(in: bodyStart..<(bodyStart + expectedLength))
+        guard var components = URLComponents(string: "http://127.0.0.1\(rawTarget)"),
+              components.host == "127.0.0.1", components.fragment == nil else {
+            return .invalid(status: 400, message: "Invalid request target")
+        }
+        // LatticeCLI uses standard form query encoding: spaces are '+', while
+        // a literal plus is '%2B'. URLComponents alone leaves '+' unchanged.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%20")
+        var query: [String: String] = [:]
+        for item in components.queryItems ?? [] {
+            if let value = item.value { query[item.name] = value }
+        }
+        return .request(HTTPRequest(
+            method: String(requestParts[0]), path: components.path, query: query,
+            headers: headers, body: data.subdata(in: bodyStart..<(bodyStart + expectedLength))
+        ))
+    }
+
+    private static func isTokenByte(_ byte: UInt8) -> Bool {
+        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
+            || "!#$%&'*+-.^_`|~".utf8.contains(byte)
     }
 }
 
@@ -582,14 +833,18 @@ private struct HTTPResponse {
     var status: Int
     var contentType: String
     var body: Data
+    var allowedOrigin: String? = nil
 
     var data: Data {
         var header = "HTTP/1.1 \(status) \(reason)\r\n"
         header += "Content-Length: \(body.count)\r\n"
         header += "Content-Type: \(contentType)\r\n"
-        header += "Access-Control-Allow-Origin: *\r\n"
-        header += "Access-Control-Allow-Headers: Content-Type\r\n"
-        header += "Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS\r\n"
+        if let allowedOrigin {
+            header += "Access-Control-Allow-Origin: \(allowedOrigin)\r\n"
+            header += "Access-Control-Allow-Headers: Content-Type\r\n"
+            header += "Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS\r\n"
+            header += "Vary: Origin\r\n"
+        }
         header += "Connection: close\r\n\r\n"
         return Data(header.utf8) + body
     }
@@ -604,6 +859,7 @@ private struct HTTPResponse {
         case 409: return "Conflict"
         case 413: return "Payload Too Large"
         case 422: return "Unprocessable Content"
+        case 431: return "Request Header Fields Too Large"
         case 500: return "Internal Server Error"
         case 503: return "Service Unavailable"
         default: return "OK"

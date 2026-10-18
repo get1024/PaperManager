@@ -2,12 +2,12 @@ import AppKit
 import Foundation
 
 enum ExportService {
-    static func bibTeX(for papers: [Paper]) -> String {
-        papers.map(bibTeXEntry).joined(separator: "\n\n")
+    static func bibTeX(for papers: [Paper], settings: AppSettings? = nil, tags: [PaperTag] = []) -> String {
+        papers.map { bibTeXEntry($0, settings: settings, tags: tags) }.joined(separator: "\n\n")
     }
 
-    static func ris(for papers: [Paper]) -> String {
-        papers.map(risRecord).joined(separator: "\n")
+    static func ris(for papers: [Paper], settings: AppSettings? = nil, tags: [PaperTag] = []) -> String {
+        papers.map { risRecord($0, settings: settings, tags: tags) }.joined(separator: "\n")
     }
 
     static func detailedMarkdown(for papers: [Paper], snapshot: LibrarySnapshot) -> [(filename: String, text: String)] {
@@ -17,12 +17,12 @@ enum ExportService {
         }
     }
 
-    static func writeBibTeX(_ papers: [Paper], to url: URL) throws {
-        try bibTeX(for: papers).write(to: url, atomically: true, encoding: .utf8)
+    static func writeBibTeX(_ papers: [Paper], to url: URL, settings: AppSettings? = nil, tags: [PaperTag] = []) throws {
+        try bibTeX(for: papers, settings: settings, tags: tags).write(to: url, atomically: true, encoding: .utf8)
     }
 
-    static func writeRIS(_ papers: [Paper], to url: URL) throws {
-        try ris(for: papers).write(to: url, atomically: true, encoding: .utf8)
+    static func writeRIS(_ papers: [Paper], to url: URL, settings: AppSettings? = nil, tags: [PaperTag] = []) throws {
+        try ris(for: papers, settings: settings, tags: tags).write(to: url, atomically: true, encoding: .utf8)
     }
 
     static func writeDetailedMarkdown(_ papers: [Paper], snapshot: LibrarySnapshot, to folder: URL) throws {
@@ -43,14 +43,14 @@ enum ExportService {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private static func bibTeXEntry(_ paper: Paper) -> String {
-        let key = paper.citekey.nilIfBlank ?? CitekeyGenerator.generate(for: paper, format: "{{authorLower}}{{year}}{{titleWord}}", existing: [])
-        let fields = bibFields(for: paper)
+    private static func bibTeXEntry(_ paper: Paper, settings: AppSettings?, tags: [PaperTag]) -> String {
+        let key = citationKey(for: paper, settings: settings)
+        let fields = bibFields(for: paper, settings: settings, tags: tags)
         let body = fields.map { "  \($0.key) = {\(escapeBib($0.value))}" }.joined(separator: ",\n")
         return "@\(paper.paperType.bibTeXType){\(key),\n\(body)\n}"
     }
 
-    private static func bibFields(for paper: Paper) -> [(key: String, value: String)] {
+    private static func bibFields(for paper: Paper, settings: AppSettings?, tags: [PaperTag]) -> [(key: String, value: String)] {
         var fields: [(String, String)] = []
         add("title", paper.title, to: &fields)
         add("subtitle", paper.subtitle ?? "", to: &fields)
@@ -92,17 +92,26 @@ enum ExportService {
         add("eventtitle", paper.event, to: &fields)
         add("eventdate", paper.eventDate, to: &fields)
         add("venue", paper.venue, to: &fields)
-        add("abstract", paper.abstract, to: &fields)
-        add("note", paper.notes, to: &fields)
-        for field in paper.customFields where !field.key.trimmed.isEmpty {
-            add(field.key, field.value, to: &fields)
+        if includes(.abstract, settings: settings) {
+            add("abstract", paper.abstract, to: &fields)
+        }
+        if includes(.keywords, settings: settings) {
+            add("keywords", keywords(for: paper, tags: tags).joined(separator: ", "), to: &fields)
+        }
+        if includes(.notes, settings: settings) {
+            add("note", paper.notes, to: &fields)
+        }
+        if includes(.customFields, settings: settings) {
+            for field in paper.customFields where !field.key.trimmed.isEmpty {
+                add(field.key, field.value, to: &fields)
+            }
         }
         return fields
     }
 
-    private static func risRecord(_ paper: Paper) -> String {
+    private static func risRecord(_ paper: Paper, settings: AppSettings?, tags: [PaperTag]) -> String {
         var lines: [String] = ["TY  - \(paper.paperType.risType)"]
-        appendRIS("ID", paper.citekey, to: &lines)
+        appendRIS("ID", citationKey(for: paper, settings: settings), to: &lines)
         appendRIS("T1", paper.title, to: &lines)
         appendRIS("ST", paper.subtitle ?? "", to: &lines)
         for author in paper.authors {
@@ -128,10 +137,43 @@ enum ExportService {
         appendRIS("Y2", paper.urlDate ?? "", to: &lines)
         appendRIS("LA", paper.language, to: &lines)
         appendRIS("M3", paper.type ?? "", to: &lines)
-        appendRIS("AB", paper.abstract, to: &lines)
-        appendRIS("N1", paper.notes, to: &lines)
+        if includes(.abstract, settings: settings) {
+            appendRIS("AB", paper.abstract, to: &lines)
+        }
+        if includes(.keywords, settings: settings) {
+            for keyword in keywords(for: paper, tags: tags) {
+                appendRIS("KW", keyword, to: &lines)
+            }
+        }
+        if includes(.notes, settings: settings) {
+            appendRIS("N1", paper.notes, to: &lines)
+        }
+        if includes(.customFields, settings: settings) {
+            for field in paper.customFields where !field.key.trimmed.isEmpty && !field.value.trimmed.isEmpty {
+                appendRIS("C1", "\(field.key.trimmed): \(field.value.trimmed)", to: &lines)
+            }
+        }
         lines.append("ER  -")
         return lines.joined(separator: "\n")
+    }
+
+    private static func includes(_ field: CitationExportField, settings: AppSettings?) -> Bool {
+        settings?.includesCitationExport(field) ?? true
+    }
+
+    private static func citationKey(for paper: Paper, settings: AppSettings?) -> String {
+        paper.citekey.nilIfBlank ?? CitekeyGenerator.generate(
+            for: paper, format: settings?.citekeyFormat ?? AppSettings.defaults.citekeyFormat, existing: []
+        )
+    }
+
+    private static func keywords(for paper: Paper, tags: [PaperTag]) -> [String] {
+        let namesByID = Dictionary(tags.map { ($0.id, $0.name.trimmed) }, uniquingKeysWith: { first, _ in first })
+        var seen = Set<String>()
+        return paper.tagIDs.compactMap { id in
+            guard let name = namesByID[id], !name.isEmpty, seen.insert(name).inserted else { return nil }
+            return name
+        }
     }
 
     private static func add(_ key: String, _ value: String, to fields: inout [(String, String)]) {

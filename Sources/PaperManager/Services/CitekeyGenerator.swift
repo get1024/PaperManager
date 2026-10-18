@@ -27,9 +27,9 @@ enum CitekeyGenerator {
     }
 
     static func render(format: String, paper: Paper) -> String {
-        var value = format
         let replacements: [String: String] = [
             "citekey": paper.citekey,
+            "auth": firstAuthorLastName(paper).lowercased(),
             "author": firstAuthorLastName(paper).capitalized,
             "authorLower": firstAuthorLastName(paper).lowercased(),
             "authorInitial": firstAuthorLastName(paper).prefix(1).uppercased(),
@@ -40,8 +40,16 @@ enum CitekeyGenerator {
             "journal": paper.journal,
             "doi": paper.doi
         ]
-        for (key, replacement) in replacements {
-            value = value.replacingOccurrences(of: "{{\(key)}}", with: replacement)
+        let pattern = #"\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}|\{([a-zA-Z][a-zA-Z0-9]*)\}"#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return format }
+        var value = format
+        let matches = expression.matches(in: format, range: NSRange(format.startIndex..., in: format))
+        for match in matches.reversed() {
+            let tokenRange = match.range(at: match.range(at: 1).location == NSNotFound ? 2 : 1)
+            guard let token = Range(tokenRange, in: format),
+                  let replacement = replacements[String(format[token])],
+                  let range = Range(match.range, in: value) else { continue }
+            value.replaceSubrange(range, with: replacement)
         }
         return value
     }
@@ -65,7 +73,8 @@ enum CitekeyGenerator {
     }
 
     private static func fallbackBase(for paper: Paper) -> String {
-        "\(firstAuthorLastName(paper).lowercased())\(paper.year.map(String.init) ?? "")\(firstMeaningfulTitleWord(paper.title).lowercased())"
+        let value = "\(firstAuthorLastName(paper).lowercased())\(paper.year.map(String.init) ?? "")\(firstMeaningfulTitleWord(paper.title).lowercased())"
             .replacingOccurrences(of: "[^a-z0-9_-]+", with: "", options: .regularExpression)
+        return value.isEmpty ? "paper" : value
     }
 }

@@ -8,9 +8,9 @@ enum AppearanceChoice: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .system: return "自动"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return PMLocalization.text("自动")
+        case .light: return PMLocalization.text("浅色")
+        case .dark: return PMLocalization.text("深色")
         }
     }
 }
@@ -23,9 +23,9 @@ enum PDFOrganizationMode: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .none: return "不做任何处理"
-        case .copy: return "复制到文件夹"
-        case .move: return "移动到文件夹"
+        case .none: return PMLocalization.text("不做任何处理")
+        case .copy: return PMLocalization.text("复制到文件夹")
+        case .move: return PMLocalization.text("移动到文件夹")
         }
     }
 }
@@ -39,10 +39,10 @@ enum PDFSubfolderGrouping: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .none: return "无"
-        case .year: return "按年份"
-        case .authorInitial: return "按作者首字母"
-        case .collection: return "按文集"
+        case .none: return PMLocalization.text("无")
+        case .year: return PMLocalization.text("按年份")
+        case .authorInitial: return PMLocalization.text("按作者首字母")
+        case .collection: return PMLocalization.text("按文集")
         }
     }
 }
@@ -54,8 +54,26 @@ enum TableDensity: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .compact: return "紧凑"
-        case .comfortable: return "舒适"
+        case .compact: return PMLocalization.text("紧凑")
+        case .comfortable: return PMLocalization.text("舒适")
+        }
+    }
+}
+
+enum CitationExportField: String, CaseIterable, Identifiable {
+    case abstract
+    case keywords
+    case notes
+    case customFields
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .abstract: return PMLocalization.text("包含摘要")
+        case .keywords: return PMLocalization.text("包含关键词（来自标签）")
+        case .notes: return PMLocalization.text("包含备注")
+        case .customFields: return PMLocalization.text("包含自定义字段")
         }
     }
 }
@@ -70,17 +88,24 @@ struct AppSettings: Codable, Hashable {
     var defaultPDFReaderPath: String = ""
     var pdfOrganizationMode: PDFOrganizationMode = .none
     var pdfOrganizationFolder: String = ""
+    // Optional so snapshots written before File Library remain decodable.
+    // Legacy path settings are interpreted by FileLibraryService until the
+    // user explicitly configures or declines a single authorized root.
+    var fileLibrary: FileLibraryPreferences? = nil
     var pdfSubfolderGrouping: PDFSubfolderGrouping = .none
     var autoRenamePDFs: Bool = false
-    var pdfRenameTemplate: String = "{{citekey}}"
+    var pdfRenameTemplate: String = "{year} - {authEtAl} - {title:50}"
     var confirmBeforeMovingFiles: Bool = true
     var autoExtractMetadataAfterImport: Bool = true
     var autoExtractAnnotationsAfterImport: Bool = false
     var autoExtractAnnotationsAfterOpeningPDF: Bool = false
 
-    var citekeyFormat: String = "{{authorLower}}{{year}}{{titleWord}}"
+    var citekeyFormat: String = "{auth}{year}"
+    // Absent in older snapshots: nil includes all four optional export groups.
+    var disabledCitationExportFields: [String]? = nil
     var metadataTemplate: String = AppSettings.defaultMetadataTemplate
     var annotationTemplate: String = AppSettings.defaultAnnotationTemplate
+    var activeMetadataTemplateID: UUID? = nil
 
     var localAPIEnabled: Bool = false
     var localAPIReadOnly: Bool = false
@@ -92,6 +117,20 @@ struct AppSettings: Codable, Hashable {
     var proUnlocked: Bool = false
 
     static let defaults = AppSettings()
+
+    func includesCitationExport(_ field: CitationExportField) -> Bool {
+        !(disabledCitationExportFields ?? []).contains(field.rawValue)
+    }
+
+    mutating func setCitationExport(_ field: CitationExportField, included: Bool) {
+        var disabled = Set(disabledCitationExportFields ?? [])
+        if included {
+            disabled.remove(field.rawValue)
+        } else {
+            disabled.insert(field.rawValue)
+        }
+        disabledCitationExportFields = disabled.isEmpty ? nil : disabled.sorted()
+    }
 
     static let defaultMetadataTemplate = """
     # {{title}}

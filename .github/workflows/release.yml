@@ -31,8 +31,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    name: Validate source membership and core regressions
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check Xcode source and resource membership
+        run: python3 scripts/check-project-membership.py
+      - name: Run isolated core regressions
+        run: scripts/test.sh core
+
   build-and-release:
     name: Build PaperManager macOS installer
+    needs: quality
     runs-on: macos-latest
 
     steps:

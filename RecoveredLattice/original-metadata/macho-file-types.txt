@@ -1,9 +1,0 @@
-/Applications/Lattice.app/Contents/MacOS/Lattice:                                                                                      Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64]
-/Applications/Lattice.app/Contents/MacOS/Lattice (for architecture x86_64):	Mach-O 64-bit executable x86_64
-/Applications/Lattice.app/Contents/MacOS/Lattice (for architecture arm64):	Mach-O 64-bit executable arm64
-/Applications/Lattice.app/Contents/MacOS/LatticePicker:                                                                                Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]
-/Applications/Lattice.app/Contents/MacOS/LatticePicker (for architecture x86_64):	Mach-O 64-bit executable x86_64
-/Applications/Lattice.app/Contents/MacOS/LatticePicker (for architecture arm64):	Mach-O 64-bit executable arm64
-/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/MacOS/Lattice Safari Extension Extension: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]
-/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/MacOS/Lattice Safari Extension Extension (for architecture x86_64):	Mach-O 64-bit executable x86_64
-/Applications/Lattice.app/Contents/PlugIns/Lattice Safari Extension Extension.appex/Contents/MacOS/Lattice Safari Extension Extension (for architecture arm64):	Mach-O 64-bit executable arm64
