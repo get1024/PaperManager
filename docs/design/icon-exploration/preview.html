@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PaperManager · 图标设计探索</title>
+<style>
+:root { color-scheme: light; --bg:#f0efeb; --card:#fffefa; --text:#232726; --muted:#666d68; --line:#dcded8; }
+body.dark { color-scheme:dark; --bg:#1e2225; --card:#2a3034; --text:#f2f0e9; --muted:#c0c6c4; --line:#434b4f; }
+* { box-sizing:border-box; }
+body { margin:0; padding:38px; background:var(--bg); color:var(--text); font:15px/1.6 -apple-system,BlinkMacSystemFont,sans-serif; transition:background .2s; }
+main { max-width:1100px; margin:auto; }
+h1 { margin:0; font-size:30px; letter-spacing:-.6px; }
+.intro { color:var(--muted); max-width:750px; margin:8px 0 24px; }
+.toolbar { display:flex; gap:8px; align-items:center; margin-bottom:24px; }
+button,a { color:inherit; }
+button { cursor:pointer; border:1px solid var(--line); background:var(--card); border-radius:18px; padding:7px 16px; font:inherit; }
+button[aria-pressed="true"] { border-color:#006c74; box-shadow:0 0 0 1px #006c74; }
+.grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+article { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:20px 16px; text-align:center; }
+.large { display:block; width:160px; height:160px; object-fit:contain; margin:10px auto 18px; }
+.source { border-radius:22%; }
+h2 { margin:10px 0 4px; font-size:18px; }
+article p { margin:0 0 20px; min-height:48px; color:var(--muted); font-size:13px; }
+.sizes { display:flex; min-height:95px; align-items:flex-end; justify-content:center; gap:17px; }
+figure { margin:0; }
+figure img { display:block; object-fit:contain; margin:auto; }
+figcaption { color:var(--muted); font-size:11px; margin-top:7px; }
+.note { margin-top:24px; color:var(--muted); font-size:13px; max-width:900px; }
+@media(max-width:1000px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:520px) { body{padding:20px} .grid{grid-template-columns:1fr} }
+</style>
+<main>
+<h1>PaperManager · 图标设计探索</h1>
+<p class="intro">四种关于纸、整理与阅读的表达。推荐 B「折页」：连续纸面、清晰轮廓与蓝白对比。当前应用仍使用原图标。</p>
+<div class="toolbar" role="group" aria-label="预览背景">
+<button id="light" aria-pressed="true">浅色背景</button><button id="dark" aria-pressed="false">深色背景</button>
+</div>
+<div class="grid" id="grid"></div>
+<p class="note">原始素材均为 1254 × 1254。B 使用不透明方形源图，浏览器仅为预览加上圆角；其余三张保留生成结果的透明外缘。此处可观察小尺寸显示效果，不代表已经完成 macOS Dock、分层材质或多尺寸生产验收。<a href="README.md">查看设计研究与素材说明</a>。</p>
+</main>
+<script>
+const concepts = [
+['A · 索引物','工业收纳 · 纸片与索引','01-index-object.png',false],
+['B · 折页 · 推荐','连续纸面 · 蓝白与珊瑚红','02-folded-field-source.png',true],
+['C · 色彩之间','色彩交叠 · 关联与秩序','03-color-relations.png',false],
+['D · 纸的回声','纸雕塑 · 有节奏的展开','04-paper-rhythm.png',false]
+];
+const grid = document.getElementById('grid');
+for (const [name,caption,file,source] of concepts) {
+ const card = document.createElement('article');
+ const picture = (size,large=false) => {
+  const img=document.createElement('img'); img.src=file; img.alt=name; img.width=size; img.height=size;
+  img.className=(large?'large ':'')+(source?'source':''); return img;
+ };
+ card.append(picture(160,true));
+ const h=document.createElement('h2'); h.textContent=name; card.append(h);
+ const p=document.createElement('p'); p.textContent=caption; card.append(p);
+ const row=document.createElement('div'); row.className='sizes';
+ for(const size of [16,32,64]) {
+  const f=document.createElement('figure'); f.append(picture(size));
+  const label=document.createElement('figcaption'); label.textContent=size+' px'; f.append(label); row.append(f);
+ }
+ card.append(row); grid.append(card);
+}
+for(const id of ['light','dark']) document.getElementById(id).onclick=()=>{
+ document.body.classList.toggle('dark',id==='dark');
+ for(const option of ['light','dark']) document.getElementById(option).setAttribute('aria-pressed',String(option===id));
+};
+</script>
+</html>

@@ -1,0 +1,17 @@
+Generation workflow: built-in imagegen created the original concept, followed by one built-in imagegen edit for the transparent outer contour. No programmatic image editing or resizing was performed.
+
+=== INITIAL GENERATION PROMPT ===
+
+Use case: logo-brand.
+Asset type: original macOS application icon concept for PaperManager, a personal scholarly-paper library.
+Primary request: create ONE finished icon concept, named internally Index Object, conveying collected knowledge through industrial-design restraint and a paper archive index. Do not show the name.
+Subject: one bold, extremely simple deep graphite archive cradle with a clear U-shaped or L-shaped silhouette, holding exactly three substantial warm ivory paper sheets with distinct staggered tops. One vivid vermilion-red index tab on one sheet is the sole bright accent. This is a new original geometric composition, not a copy of any product or trademark.
+Composition: frontal, centered, compact, subject about 70 percent of the tile. Strong optical balance and a silhouette readable at 32 pixels. The opaque warm-white / very pale gray app tile has a gently rounded square outline with a very narrow transparent exterior margin so the complete outer contour is visible.
+Style: polished contemporary native macOS icon, quiet sculptural depth, restrained precision inspired by the functional principles of good industrial design, subtle soft shadow and tiny believable ceramic/paper material cues; simple filled forms, broad surfaces, softly rounded edges. Light from upper left. Not photorealistic product photography.
+Palette: warm white, ivory and deep graphite, one saturated vermilion-red accent only.
+Background: actual transparent alpha outside the opaque rounded-square app tile. No checkerboard drawn into image.
+Constraints: one single standalone 1024 x 1024 square icon asset, clean frontal view. No scene, no desk, no mockup, no Dock, no frame, no labels. No text, letters, PDF glyph, page writing, graduation cap, thin lines, tiny details, decorative texture noise, generic blue folder, watermark, or collage.
+
+=== IMAGEGEN EDIT PROMPT ===
+
+Use case: precise-object-edit. Edit the referenced macOS app icon. Preserve exactly the central warm ivory three-sheet archive object, vermilion tab, graphite cradle, current centered composition, and warm white rounded-square tile. Fix ONLY the outer contour: replace all ragged specks, stray pixels, fuzzy white flecks and broken alpha around the rounded tile with one perfectly clean, smooth, continuous antialiased rounded-square edge, a soft subtle shadow allowed immediately under the tile. Entire tile and paper object must be fully opaque (alpha 255), all exterior background genuinely transparent (alpha 0), clean antialiasing transition on outer edge only. No floating dust or chips. Keep full icon entirely in frame with a small transparent margin. Output one 1024 by 1024 square PNG if possible. No text, no new objects, no scene or collage.

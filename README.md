@@ -154,6 +154,8 @@ scripts/             构建、启动、测试与维护入口
 
 本项目参考 Lattice 3.0 的发布包与实际行为独立实现。界面仍有少数字形、材质和未测状态差异；具体测试覆盖见[验证记录](docs/CLEANUP.md)。
 
+新的图标方向、设计研究与原始素材见[图标设计探索](docs/design/icon-exploration/README.md)。当前应用仍使用现有图标。
+
 ---
 
 README 的结构与图文呈现参考了 [IINA](https://github.com/iina/iina)、[Stats](https://github.com/exelban/stats) 和 [Ice](https://github.com/jordanbaird/Ice)。本页界面图片均由 PaperManager 自身组件生成。

@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-24",
+  "status": "raster-design-exploration; not integrated in the app",
+  "tool": "built-in imagegen",
+  "recommended": "02-folded-field-source.png",
+  "assets": [
+    {
+      "file": "01-index-object.png",
+      "pixels": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "092fc55a174b4e80d901654b82838e7e60b393327d19dbb177e55af81a9fe9e4",
+      "bytes": 1398631,
+      "alphaRange": [
+        0,
+        255
+      ]
+    },
+    {
+      "file": "02-folded-field-source.png",
+      "pixels": [
+        1254,
+        1254
+      ],
+      "mode": "RGB",
+      "sha256": "a630ed6d52fdda94c5e47694a2069c4eab9aa724f01907525957a7ee83e1fb2d",
+      "bytes": 1386359,
+      "alphaRange": [
+        255,
+        255
+      ]
+    },
+    {
+      "file": "02-folded-field.png",
+      "pixels": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "3773f0a500f22b82cf91299da66bd3ccc4dd9fe1593248b8f0292fbca5b9c77e",
+      "bytes": 1845072,
+      "alphaRange": [
+        0,
+        255
+      ]
+    },
+    {
+      "file": "03-color-relations.png",
+      "pixels": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "8c351dae14e62cc2c694ea2462d05d524adf02df70c34822b66236e33b9a7d80",
+      "bytes": 1060115,
+      "alphaRange": [
+        0,
+        255
+      ]
+    },
+    {
+      "file": "04-paper-rhythm.png",
+      "pixels": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "sha256": "98dff0af2f9a19dae8319833206b6671a3bc377d720af7a87f432a031c6143bd",
+      "bytes": 1685500,
+      "alphaRange": [
+        0,
+        255
+      ]
+    }
+  ],
+  "prompts": [
+    {
+      "file": "01-prompt.txt",
+      "bytes": 2971,
+      "sha256": "c7201f7a621cdd1ffdb0caa75f534559bc4737252750691a2335f3516c365e7d"
+    },
+    {
+      "file": "02-prompt.txt",
+      "bytes": 1893,
+      "sha256": "f9aa42a3d559a170b3499c088508d60a8f2ad4caa4b5e2994367ebdda027e375"
+    },
+    {
+      "file": "02-source-prompt.txt",
+      "bytes": 1621,
+      "sha256": "4144c28dba4820d659d0987dffa4810ffd2b7cd3079ab1172d1488f280b156bf"
+    },
+    {
+      "file": "03-prompt.txt",
+      "bytes": 1552,
+      "sha256": "4260c2a9421f99a98f60fae321a3384eab83fb72203d9147b43ae13c3ec9524f"
+    },
+    {
+      "file": "04-prompt.txt",
+      "bytes": 1545,
+      "sha256": "dcee0d69f44bdd6155eb5b82fde66e7ac51725d43442c71a5fde7949ab306c19"
+    }
+  ],
+  "validation": {
+    "imagesVisuallyInspected": true,
+    "squareSourceOpaque": true,
+    "productionIconChanged": false,
+    "dockValidated": false,
+    "multiSizeExported": false,
+    "browserPreview": {
+      "backgrounds": [
+        "light",
+        "dark"
+      ],
+      "displayPixels": [
+        16,
+        32,
+        64,
+        160
+      ],
+      "result": "All four directions visually inspected; recommended B retains a clear main silhouette at small sizes. This is CSS preview only, not Dock verification."
+    }
+  },
+  "limitations": [
+    "Generator returned 1254x1254 rather than requested 1024x1024.",
+    "RGBA concepts retain faint stray exterior pixels and partially opaque tile interiors.",
+    "Recommended RGB source was edited by imagegen to extend the blue background; fine paper texture changed slightly.",
+    "Browser rounds the recommended source with CSS for preview only; no baked mask or Icon Composer layers were delivered."
+  ]
+}
