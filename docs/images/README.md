@@ -1,15 +1,23 @@
 # README 图片
 
-这些图片用当前生产代码的原生视图和独立演示数据生成，不是从用户文库截取的实机画面，也不是手绘的界面模型。
+应用图标来自正式图标资源；界面图片用当前生产代码的原生视图和独立演示数据生成，不是从用户文库截取的实机画面，也不是手绘的界面模型。
 
 | 文件 | 内容 | 来源 |
 |---|---|---|
-| `app-icon.png` | 应用图标 | 原样复制自 `Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png` |
+| `app-icon.png` | B「折页」米灰版正式图标 | 与 `Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png` 一致；[母版与导出方式](../../App/IconSource/README.md) |
 | `library.png` | 文集、标签、列表和元数据检查器 | `NativeLibraryView`、`PaperDetailView` 等生产组件；32 条合成演示文献 |
 | `import-preview.png` | BibTeX 导入选择和重复项提示 | 生产 `ImportPreviewView`；不执行导入 |
 | `templates.png` | 元数据与标注模板编辑区 | 生产 `SettingsView`；演示模板页 |
 
 ## 重新生成
+
+图标由正式母版导出：
+
+```sh
+scripts/render-app-icon.sh
+```
+
+其余三张界面图片使用独立的文档渲染器：
 
 ```sh
 scripts/render-readme-images.sh

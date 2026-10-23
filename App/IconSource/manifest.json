@@ -1,0 +1,178 @@
+{
+  "exports" : [
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-16.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        16,
+        16
+      ],
+      "sha256" : "64ea14f03191f4fc35b14ede435b22464ea5428d9a91cb6f8247460852fd0207",
+      "translucentPixels" : 76,
+      "transparentPixels" : 80
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-16@2x.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        32,
+        32
+      ],
+      "sha256" : "c5d98806efd2bb7df4a765d4cefbb0b3502dd31415f3569e7e122f92ad28b10f",
+      "translucentPixels" : 100,
+      "transparentPixels" : 380
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-32.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        32,
+        32
+      ],
+      "sha256" : "c5d98806efd2bb7df4a765d4cefbb0b3502dd31415f3569e7e122f92ad28b10f",
+      "translucentPixels" : 100,
+      "transparentPixels" : 380
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-32@2x.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        64,
+        64
+      ],
+      "sha256" : "0bdbc986ec0ff3cf84deca83adb1de9855805b6311dc8f6d2547c17456c01710",
+      "translucentPixels" : 224,
+      "transparentPixels" : 1540
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-128.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        128,
+        128
+      ],
+      "sha256" : "fac43ceca801096534e05847b393b9f0a289655e759a1d04b1c9a3d347f09305",
+      "translucentPixels" : 830,
+      "transparentPixels" : 6036
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-128@2x.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        256,
+        256
+      ],
+      "sha256" : "cfd6f53d4f4aad59a288a4e8c0b379d444a402037876f12e5277327dde07b923",
+      "translucentPixels" : 2672,
+      "transparentPixels" : 23660
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-256.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        256,
+        256
+      ],
+      "sha256" : "cfd6f53d4f4aad59a288a4e8c0b379d444a402037876f12e5277327dde07b923",
+      "translucentPixels" : 2672,
+      "transparentPixels" : 23660
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-256@2x.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        512,
+        512
+      ],
+      "sha256" : "a11a4c328c37a301ccfe95c49988335e858154a7cfe7db191633fcd9156d76a1",
+      "translucentPixels" : 10046,
+      "transparentPixels" : 93774
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        512,
+        512
+      ],
+      "sha256" : "a11a4c328c37a301ccfe95c49988335e858154a7cfe7db191633fcd9156d76a1",
+      "translucentPixels" : 10046,
+      "transparentPixels" : 93774
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        1024,
+        1024
+      ],
+      "sha256" : "1602bd2d551c57e10f3f85a73cca8bc986bbf583ecbfe2ea47cf4525fcac069b",
+      "translucentPixels" : 39976,
+      "transparentPixels" : 371428
+    },
+    {
+      "colorSpace" : "sRGB",
+      "file" : "docs/images/app-icon.png",
+      "mode" : "RGBA",
+      "pixels" : [
+        256,
+        256
+      ],
+      "sha256" : "cfd6f53d4f4aad59a288a4e8c0b379d444a402037876f12e5277327dde07b923",
+      "translucentPixels" : 2672,
+      "transparentPixels" : 23660
+    }
+  ],
+  "generatorSHA256" : {
+    "scripts/render-app-icon.sh" : "a22becf11f7387ff7ddfd8be20283dd225e36bb4684a8a615315e466f60ade88",
+    "scripts/tools/RenderAppIcon.swift" : "8662c6539c33581d383142520fb535b35c43179a3b5955bfd99f5ae38f75778a"
+  },
+  "geometry" : {
+    "canvasPixels" : 1024,
+    "shadowBlurPixels" : 14,
+    "shadowOffsetPixels" : [
+      0,
+      -8
+    ],
+    "shadowOpacity" : 0.16,
+    "shape" : "superellipse",
+    "superellipseExponent" : 4.5,
+    "tileInsetPixels" : 100,
+    "tilePixels" : 824
+  },
+  "icns" : {
+    "file" : "App/PaperManager.icns",
+    "sha256" : "1b947e8b3e25d383e652b76952385417fed35b683df70df1842ebaf2b517dbee"
+  },
+  "master" : {
+    "colorSpace" : "sRGB",
+    "file" : "App/IconSource/AppIcon-1024.png",
+    "mode" : "RGB",
+    "pixels" : [
+      1024,
+      1024
+    ],
+    "sha256" : "42dad1b615871bc0ea45d99a2cf5ca8e401fbf700df97dc63ba99e4aade1c5e1"
+  },
+  "schemaVersion" : 1,
+  "source" : {
+    "file" : "App/IconSource/folded-field-greige.png",
+    "mode" : "RGB",
+    "pixels" : [
+      1254,
+      1254
+    ],
+    "sha256" : "b09ea7e3bbbba29bbb3fcc0c5c6106323fc6a484f5a612b1ba3cfdb791bda0f0"
+  },
+  "validation" : "All ten AppIcon PNG dimensions and transparent canvas were checked; ICNS was compiled by macOS iconutil. Artwork composition is unchanged across sizes."
+}

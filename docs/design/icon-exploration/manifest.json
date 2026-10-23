@@ -1,8 +1,20 @@
 {
   "date": "2026-10-24",
-  "status": "raster-design-exploration; not integrated in the app",
+  "status": "historical raster-design-exploration; B adopted as a separate greige production icon",
   "tool": "built-in imagegen",
   "recommended": "02-folded-field-source.png",
+  "adoptedDesign": {
+    "concept": "B folded field",
+    "requestedChange": "Replace the bright blue background with greige",
+    "documentation": "../../../App/IconSource/README.md",
+    "generatedSource": "../../../App/IconSource/folded-field-greige.png",
+    "normalizedSource": "../../../App/IconSource/AppIcon-1024.png",
+    "assetCatalog": "../../../Sources/PaperManager/Resources/Assets.xcassets/AppIcon.appiconset",
+    "icns": "../../../App/PaperManager.icns",
+    "readmeIcon": "../../images/app-icon.png",
+    "exportScript": "../../../scripts/render-app-icon.sh",
+    "note": "Production resources are separate from the historical blue concept assets. The validation object below records the original exploration stage only."
+  },
   "assets": [
     {
       "file": "01-index-object.png",
