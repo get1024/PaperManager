@@ -1,8 +1,7 @@
 import AppKit
 
-/// Keep native row selection, emphasis and AX semantics within the visible
-/// table viewport when columns overflow.
-/// The floating reference fills that viewport without an inset or corner radius.
+/// Paint a complete row while AppKit clips it to the table viewport.
+/// Preserve native emphasis and AX semantics without an inset or corner radius.
 final class NativePaperRowView: NSTableRowView {
     private static let reuseID = NSUserInterfaceItemIdentifier("NativePaperRowView")
 
@@ -15,13 +14,12 @@ final class NativePaperRowView: NSTableRowView {
 
     override func drawSelection(in dirtyRect: NSRect) {
         guard isSelected, selectionHighlightStyle != .none else { return }
-        let viewport = visibleRect.width > 0 ? visibleRect : bounds
-        let selection = NSRect(x: viewport.minX, y: bounds.minY,
-                               width: max(0, viewport.width), height: bounds.height)
-        guard selection.width > 0 else { return }
+        // The row backing can be reused after horizontal scrolling or pane
+        // resizing. Painting only visibleRect leaves newly exposed columns blank.
+        guard !bounds.isEmpty else { return }
         let color: NSColor = isEmphasized ? .selectedContentBackgroundColor : .unemphasizedSelectedContentBackgroundColor
         color.setFill()
-        NSBezierPath(rect: selection).fill()
+        NSBezierPath(rect: bounds).fill()
     }
 }
 

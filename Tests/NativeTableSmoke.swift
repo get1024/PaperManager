@@ -36,12 +36,109 @@ struct NativeTableSmoke {
         do {
             try run()
             let expansionOnly = ProcessInfo.processInfo.environment["PAPERMANAGER_TABLE_EXPANSION_ONLY"] == "1"
-            print(expansionOnly ? "Native table expansion geometry: 1 passed, 0 failed" : "Native table smoke: 23 passed, 0 failed")
+            let selectionOnly = ProcessInfo.processInfo.environment["PAPERMANAGER_TABLE_SELECTION_ONLY"] == "1"
+            print(expansionOnly ? "Native table expansion geometry: 1 passed, 0 failed" :
+                  selectionOnly ? "Native row selection coverage: 1 passed, 0 failed" : "Native table smoke: 24 passed, 0 failed")
             exit(0)
         } catch {
             print("FAIL: \(error)")
             exit(1)
         }
+    }
+
+    /// AppKit can retain a row's backing pixels while its clip view moves. Paint
+    /// once through the actual delegate-created row, then sample newly exposed
+    /// edges after real scrolling/resizing. Repainting in the test after every
+    /// scroll would conceal the missing selection pixels seen in the recording.
+    private static func verifySelectionBackingCoverage(outline: NSOutlineView, window: NSWindow) throws {
+        guard let scroll = outline.enclosingScrollView else {
+            throw Failure(description: "Missing selection coverage scroll view")
+        }
+        let originalSize = window.contentView?.bounds.size ?? .zero
+        let originalOffset = scroll.contentView.bounds.origin
+        let originalSelection = outline.selectedRowIndexes
+        defer {
+            window.setContentSize(originalSize)
+            window.contentView?.layoutSubtreeIfNeeded()
+            scroll.contentView.scroll(to: originalOffset)
+            scroll.reflectScrolledClipView(scroll.contentView)
+            outline.selectRowIndexes(originalSelection, byExtendingSelection: false)
+        }
+        window.setContentSize(NSSize(width: 700, height: 300))
+        window.contentView?.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
+        outline.selectRowIndexes([0], byExtendingSelection: false)
+        guard let row = outline.rowView(atRow: 0, makeIfNecessary: true) as? NativePaperRowView else {
+            throw Failure(description: "Selection coverage fixture did not use the production row delegate")
+        }
+        let bounds = row.bounds
+        let initialViewport = row.visibleRect
+        try expect(bounds.width > initialViewport.width + 200 && initialViewport.width > 300,
+                   "Selection coverage fixture did not actually clip its overflowing document row")
+        let width = Int(ceil(bounds.width)), height = Int(ceil(bounds.height))
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0), let graphics = NSGraphicsContext(bitmapImageRep: bitmap) else {
+            throw Failure(description: "Could not allocate the retained selection backing fixture")
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphics
+        NSColor.clear.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill(using: .copy)
+        let transform = NSAffineTransform()
+        transform.translateX(by: -bounds.minX, yBy: -bounds.minY)
+        transform.concat()
+        row.drawSelection(in: bounds)
+        NSGraphicsContext.restoreGraphicsState()
+
+        var stages: [[String: Any]] = []
+        var failures: [String] = []
+        func sample(_ stage: String) {
+            let viewport = row.visibleRect
+            let sampleY = min(height - 1, max(0, Int(floor(bounds.midY - bounds.minY))))
+            let left = min(width - 1, max(0, Int(floor(viewport.minX - bounds.minX + 1))))
+            let right = min(width - 1, max(0, Int(floor(viewport.maxX - bounds.minX - 2))))
+            let leftAlpha = bitmap.colorAt(x: left, y: sampleY)?.alphaComponent ?? 0
+            let rightAlpha = bitmap.colorAt(x: right, y: sampleY)?.alphaComponent ?? 0
+            stages.append(["stage": stage, "rowWidth": Double(bounds.width),
+                "viewportX": Double(viewport.minX), "viewportWidth": Double(viewport.width),
+                "leftSampleX": left, "rightSampleX": right,
+                "leftAlpha": Double(leftAlpha), "rightAlpha": Double(rightAlpha)])
+            if leftAlpha < 0.99 || rightAlpha < 0.99 {
+                failures.append("\(stage): a newly exposed viewport edge lacks selection pixels (left \(leftAlpha), right \(rightAlpha))")
+            }
+        }
+        sample("initialClippedViewport")
+        scroll.contentView.scroll(to: NSPoint(x: 120, y: 0))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try expect(row.visibleRect.minX > initialViewport.minX + 100,
+                   "Selection coverage fixture did not actually scroll its native clip view")
+        sample("scrollRight120")
+        window.setContentSize(NSSize(width: 900, height: 300))
+        window.contentView?.layoutSubtreeIfNeeded()
+        try expect(row.visibleRect.width > initialViewport.width + 150,
+                   "Selection coverage fixture did not reveal a wider native viewport")
+        sample("widenViewport900")
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        sample("returnLeftAfterResize")
+        window.setContentSize(NSSize(width: 700, height: 300))
+        window.contentView?.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: NSPoint(x: bounds.maxX - scroll.contentView.bounds.width, y: 0))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        sample("rightmostColumns")
+        if let path = ProcessInfo.processInfo.environment["PAPERMANAGER_TABLE_SELECTION_REPORT"] {
+            let report = URL(fileURLWithPath: path)
+            try FileManager.default.createDirectory(at: report.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: ["ok": failures.isEmpty, "failures": failures, "stages": stages],
+                options: [.prettyPrinted, .sortedKeys]).write(to: report, options: .atomic)
+            if let png = bitmap.representation(using: .png, properties: [:]) {
+                try png.write(to: report.deletingPathExtension().appendingPathExtension("png"), options: .atomic)
+            }
+        }
+        try expect(failures.isEmpty, failures.joined(separator: "; "))
+        print("PASS: Retained native row selection covers both newly exposed viewport edges through scrolling and resizing")
     }
 
     private static func run() throws {
@@ -126,19 +223,43 @@ struct NativeTableSmoke {
             bytesPerRow: 0, bitsPerPixel: 0), let graphics = NSGraphicsContext(bitmapImageRep: bitmap) else {
             throw Failure(description: "Could not create a native selection bitmap")
         }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = graphics
-        NSColor.clear.setFill()
-        highlightRow.bounds.fill(using: .copy)
-        highlightRow.drawSelection(in: highlightRow.bounds)
-        NSGraphicsContext.restoreGraphicsState()
+        func paintHighlight() {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = graphics
+            NSColor.clear.setFill()
+            highlightRow.bounds.fill(using: .copy)
+            highlightRow.drawSelection(in: highlightRow.bounds)
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        paintHighlight()
         try expect((bitmap.colorAt(x: 0, y: 13)?.alphaComponent ?? 0) > 0.99 &&
                    (bitmap.colorAt(x: 299, y: 13)?.alphaComponent ?? 0) > 0.99,
                    "The floating reference selection did not fill both viewport edges")
         try expect((bitmap.colorAt(x: 0, y: 0)?.alphaComponent ?? 0) > 0.99 &&
                    (bitmap.colorAt(x: 150, y: 13)?.alphaComponent ?? 0) > 0.99,
                    "The floating reference selection lost its square corner or solid center")
-        print("PASS: Actual native rows fill the visible viewport with a square selection")
+        highlightRow.isEmphasized = false
+        paintHighlight()
+        guard let inactive = bitmap.colorAt(x: 150, y: 13)?.usingColorSpace(.deviceRGB),
+              let expectedInactive = NSColor.unemphasizedSelectedContentBackgroundColor.usingColorSpace(.deviceRGB) else {
+            throw Failure(description: "Could not resolve the system's inactive selection color")
+        }
+        try expect(abs(inactive.redComponent - expectedInactive.redComponent) < 0.01 &&
+                   abs(inactive.greenComponent - expectedInactive.greenComponent) < 0.01 &&
+                   abs(inactive.blueComponent - expectedInactive.blueComponent) < 0.01 && inactive.alphaComponent > 0.99,
+                   "An inactive selected row did not retain the native unemphasized selection color")
+        highlightRow.isSelected = false
+        paintHighlight()
+        try expect((bitmap.colorAt(x: 150, y: 13)?.alphaComponent ?? 1) == 0,
+                   "An unselected row still painted selection pixels")
+        highlightRow.isSelected = true
+        highlightRow.selectionHighlightStyle = .none
+        paintHighlight()
+        try expect((bitmap.colorAt(x: 150, y: 13)?.alphaComponent ?? 1) == 0,
+                   "A row with selection drawing disabled still painted selection pixels")
+        print("PASS: Native rows retain square coverage, system inactive colors and selection drawing guards")
+        try verifySelectionBackingCoverage(outline: outline, window: window)
+        if ProcessInfo.processInfo.environment["PAPERMANAGER_TABLE_SELECTION_ONLY"] == "1" { return }
         let initialReloads = controller.smokeFullReloadCount
         let initialRowReloads = controller.smokeRowReloadCount
         let initialCell = outline.view(atColumn: 0, row: 0, makeIfNecessary: true)

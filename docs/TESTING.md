@@ -15,7 +15,17 @@
 
 结果日志保存在 `.build/test-results`。UI 组需要 macOS WindowServer 会话，AX 组还需要已有的辅助功能访问权限；脚本不会自动授予权限。几何测试、后台 AX 和真实屏幕操作是不同验证范围。
 
-`test-native-window-group.sh` 包含九个阶段，覆盖不同窗口尺寸、侧栏/检查器收放及选择变化。可设置 `PAPERMANAGER_GEOMETRY_NEGATIVE_CONTROL=1` 在临时源副本移除尺寸修复作负控；负控应失败。
+`test-native-window-group.sh` 包含 32 个阶段，覆盖不同窗口尺寸、侧栏/检查器收放及选择变化。它需要独占前台，运行期间不要同时操作其他应用。可设置 `PAPERMANAGER_GEOMETRY_NEGATIVE_CONTROL=1` 在临时源副本移除尺寸修复作负控；负控应失败。
+
+`test-native-table.sh` 包含选中背景覆盖回归：在真实溢出列表中首次绘制选中行，再横向滚动、扩大视口并回到左右边界，检查新露出区域的像素。它同时覆盖非强调色、未选中和关闭高亮的状态。可单独运行并保存 JSON / PNG：
+
+```sh
+PAPERMANAGER_TABLE_SELECTION_ONLY=1 \
+PAPERMANAGER_TABLE_SELECTION_REPORT="$PWD/.build/test-results/row-selection/report.json" \
+  scripts/test-native-table.sh
+```
+
+这项回归验证保留的选中背景是否覆盖完整行，不替代实际窗口滚动和面板动画的屏幕检查。
 
 CI 在主分支构建前运行 core 和项目成员检查，再使用完整 Xcode 构建 app/CLI，签名并产生安装包。测试通过不等于 Shortcuts 注册、Safari 发行或所有视觉操作已验收。
 
