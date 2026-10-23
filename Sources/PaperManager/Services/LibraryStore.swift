@@ -2,23 +2,249 @@ import AppKit
 import Combine
 import Foundation
 
+struct MetadataRefreshProgress: Equatable {
+    var total = 0
+    var completed = 0
+    var updated = 0
+    var unchanged = 0
+    var failed = 0
+    var skipped = 0
+    var cancelled = false
+    var isRunning = true
+    var errors: [UUID: String] = [:]
+}
+
+private struct MetadataRefreshOutcome {
+    var paperID: UUID
+    var sourceIdentity: [String]
+    var importBaseline: Paper? = nil
+    var metadata: PaperMetadata? = nil
+    var error: String? = nil
+    var cancelled = false
+}
+
+private struct FileOperationOutcome {
+    var attachment: Attachment
+    var receipt: FilePlacementReceipt?
+}
+
+@MainActor
+private final class WeakLibraryStore {
+    weak var value: LibraryStore?
+    init(_ value: LibraryStore) { self.value = value }
+}
+
 @MainActor
 final class LibraryStore: ObservableObject {
+    private static var liveStores: [WeakLibraryStore] = []
+    private static var fileOperationShutdownRequested = false
     @Published private(set) var snapshot: LibrarySnapshot
     @Published var statusMessage: String?
     @Published var isBusy = false
     @Published private(set) var loadError: String?
+    @Published private(set) var metadataRefreshProgress: MetadataRefreshProgress?
+    @Published private(set) var fileOperationProgress: FileOperationProgress?
 
     let persistenceURL: URL
     private let trashFile: (URL) throws -> Void
+    private let metadataLookup: (Paper) async throws -> PaperMetadata
+    private let filePlacement: (FilePlacementPlan) throws -> FilePlacementReceipt
+    private var fileOperationTask: Task<Void, Never>?
+    private var metadataRefreshTask: Task<Void, Never>?
+    private var metadataRefreshPending: [UUID] = []
+    private var metadataRefreshActiveIDs: Set<UUID> = []
+    private var metadataRefreshKnownIDs: Set<UUID> = []
+    private var metadataRefreshFailedIDs: [UUID] = []
+    private var metadataRefreshImportBaselines: [UUID: Paper] = [:]
+    private var metadataRefreshCancellationRequested = false
+    private var libraryGeneration = UUID()
 
     init(persistenceURL: URL? = nil, trashFile: @escaping (URL) throws -> Void = {
         try FileManager.default.trashItem(at: $0, resultingItemURL: nil)
+    }, metadataLookup: @escaping (Paper) async throws -> PaperMetadata = { paper in
+        try await MetadataLookupClient.lookup(doi: paper.doi.nilIfBlank, arxivID: paper.arxivLookupID,
+                                              isbn: paper.isbn.nilIfBlank, title: paper.title.nilIfBlank)
+    }, filePlacement: @escaping (FilePlacementPlan) throws -> FilePlacementReceipt = {
+        try FileLibraryService.execute($0, checkCancellation: { try Task.checkCancellation() })
     }) {
         self.persistenceURL = persistenceURL ?? Self.defaultPersistenceURL()
         self.trashFile = trashFile
+        self.metadataLookup = metadataLookup
+        self.filePlacement = filePlacement
         self.snapshot = .empty
         load()
+        Self.liveStores.removeAll { $0.value == nil }
+        Self.liveStores.append(WeakLibraryStore(self))
+    }
+
+    var isMetadataRefreshing: Bool { metadataRefreshTask != nil }
+    var libraryIdentityToken: UUID { libraryGeneration }
+    var isFileOperationRunning: Bool { fileOperationTask != nil }
+
+    static var hasRunningFileOperations: Bool { liveStores.contains { $0.value?.isFileOperationRunning == true } }
+
+    /// Mark shutdown synchronously so a second window cannot start a move while
+    /// the app delegate is waiting for an earlier placement to roll back. Only
+    /// file jobs are awaited; metadata providers may be slow or offline.
+    static func beginFileOperationShutdown() -> Task<Void, Never> {
+        fileOperationShutdownRequested = true
+        let stores = liveStores.compactMap(\.value).filter(\.isFileOperationRunning)
+        stores.forEach { $0.cancelFileOperation() }
+        return Task { for store in stores { await store.waitForFileOperation() } }
+    }
+
+    static func resumeAfterCancelledFileOperationShutdown() { fileOperationShutdownRequested = false }
+
+    func isRefreshingMetadata(paperID: UUID) -> Bool {
+        metadataRefreshPending.contains(paperID) || metadataRefreshActiveIDs.contains(paperID)
+    }
+
+    /// One queue belongs to the shared library, so overlapping windows cannot
+    /// issue duplicate refreshes for the same paper. Import/file-operation busy
+    /// state is independent and is never cleared by this background job.
+    @discardableResult
+    func enqueueMetadataRefresh(paperIDs: [UUID], replacingUneditedFieldsFrom importedPDFs: [UUID: Paper] = [:]) -> Bool {
+        guard !metadataRefreshCancellationRequested else { return false }
+        let starting = metadataRefreshTask == nil
+        var knownIDs = starting ? Set<UUID>() : metadataRefreshKnownIDs
+        let added = paperIDs.filter { id in
+            paper(with: id) != nil && knownIDs.insert(id).inserted
+        }
+        guard !added.isEmpty else { return false }
+        if starting {
+            metadataRefreshFailedIDs.removeAll()
+            metadataRefreshImportBaselines.removeAll()
+            metadataRefreshProgress = MetadataRefreshProgress()
+        }
+        metadataRefreshKnownIDs = knownIDs
+        metadataRefreshPending.append(contentsOf: added)
+        for id in added where importedPDFs[id]?.id == id { metadataRefreshImportBaselines[id] = importedPDFs[id] }
+        metadataRefreshProgress?.total += added.count
+        guard starting else { return true }
+        let generation = libraryGeneration
+        metadataRefreshTask = Task { [weak self] in await self?.runMetadataRefreshQueue(generation: generation) }
+        return true
+    }
+
+    func cancelMetadataRefresh() {
+        guard metadataRefreshTask != nil else { return }
+        metadataRefreshCancellationRequested = true
+        metadataRefreshTask?.cancel()
+    }
+
+    @discardableResult
+    func retryFailedMetadataRefresh() -> Bool {
+        guard !isMetadataRefreshing else { return false }
+        return enqueueMetadataRefresh(paperIDs: metadataRefreshFailedIDs, replacingUneditedFieldsFrom: metadataRefreshImportBaselines)
+    }
+
+    /// Also useful to callers which must finish a refresh before exporting.
+    func waitForMetadataRefresh() async { await metadataRefreshTask?.value }
+
+    private func runMetadataRefreshQueue(generation: UUID) async {
+        defer {
+            let cancelled = metadataRefreshCancellationRequested || Task.isCancelled
+            metadataRefreshProgress?.cancelled = cancelled
+            metadataRefreshProgress?.isRunning = false
+            if generation == libraryGeneration, let progress = metadataRefreshProgress {
+                let prefix = cancelled ? PMLocalization.text("元数据刷新已停止") : PMLocalization.text("元数据刷新完成")
+                statusMessage = PMLocalization.format("%@：更新 %d，未变 %d，失败 %d，跳过 %d。", prefix,
+                                                       progress.updated, progress.unchanged, progress.failed, progress.skipped)
+            }
+            metadataRefreshPending.removeAll()
+            metadataRefreshActiveIDs.removeAll()
+            metadataRefreshTask = nil
+            metadataRefreshCancellationRequested = false
+        }
+        // Three independent provider calls in flight bound network pressure;
+        // completion-order processing keeps a slow provider from blocking saves.
+        await withTaskGroup(of: MetadataRefreshOutcome.self) { group in
+            var activeCount = 0
+            while true {
+                if Task.isCancelled || metadataRefreshCancellationRequested || generation != libraryGeneration {
+                    group.cancelAll(); break
+                }
+                while activeCount < 3, !metadataRefreshPending.isEmpty {
+                    let id = metadataRefreshPending.removeFirst()
+                    guard let paper = paper(with: id) else {
+                        metadataRefreshProgress?.completed += 1
+                        metadataRefreshProgress?.skipped += 1
+                        continue
+                    }
+                    let lookup = metadataLookup
+                    let sourceIdentity = Self.metadataRefreshIdentity(paper)
+                    let imported = metadataRefreshImportBaselines[id]
+                    let importBaseline = imported.flatMap { Self.metadataRefreshIdentity($0) == sourceIdentity ? $0 : nil }
+                    activeCount += 1
+                    metadataRefreshActiveIDs.insert(id)
+                    group.addTask {
+                        do {
+                            try Task.checkCancellation()
+                            let metadata = try await lookup(paper)
+                            try Task.checkCancellation()
+                            return MetadataRefreshOutcome(paperID: id, sourceIdentity: sourceIdentity, importBaseline: importBaseline, metadata: metadata)
+                        } catch {
+                            return MetadataRefreshOutcome(paperID: id, sourceIdentity: sourceIdentity, error: error.localizedDescription,
+                                                          cancelled: error is CancellationError || Task.isCancelled)
+                        }
+                    }
+                }
+                guard activeCount > 0, let outcome = await group.next() else { break }
+                activeCount -= 1
+                metadataRefreshActiveIDs.remove(outcome.paperID)
+                if Task.isCancelled || metadataRefreshCancellationRequested || generation != libraryGeneration {
+                    group.cancelAll(); break
+                }
+                metadataRefreshProgress?.completed += 1
+                guard !outcome.cancelled else {
+                    metadataRefreshProgress?.skipped += 1
+                    continue
+                }
+                guard let latest = paper(with: outcome.paperID) else {
+                    metadataRefreshProgress?.skipped += 1
+                    continue
+                }
+                guard Self.metadataRefreshIdentity(latest) == outcome.sourceIdentity else {
+                    // A DOI/ISBN/lookup-title edit may now identify a different
+                    // work. Its old request must not fill the new record.
+                    metadataRefreshProgress?.skipped += 1
+                    continue
+                }
+                if let metadata = outcome.metadata {
+                    do {
+                        // Merge with the latest record only, preserving edits,
+                        // local attachments and organization made during await.
+                        let merged: Paper
+                        if let baseline = outcome.importBaseline {
+                            // Provider values may replace PDF-inferred fields.
+                            // Every field edited since the request began wins
+                            // over that response, including deliberate clearing.
+                            let enriched = metadata.merged(into: baseline, replaceExisting: true)
+                            merged = latest.applyingEdits(to: enriched, from: baseline)
+                        } else { merged = metadata.merged(into: latest) }
+                        let changed = !latest.hasSameEditableContent(as: merged)
+                        try updatePaperDurably(merged)
+                        if changed { metadataRefreshProgress?.updated += 1 }
+                        else { metadataRefreshProgress?.unchanged += 1 }
+                    } catch { recordMetadataRefreshFailure(outcome.paperID, message: error.localizedDescription) }
+                } else { recordMetadataRefreshFailure(outcome.paperID, message: outcome.error ?? "") }
+                if let progress = metadataRefreshProgress {
+                    statusMessage = PMLocalization.format("正在刷新元数据 %d/%d：%@", progress.completed, progress.total, latest.displayTitle)
+                }
+            }
+        }
+    }
+
+    private func recordMetadataRefreshFailure(_ id: UUID, message: String) {
+        metadataRefreshFailedIDs.append(id)
+        metadataRefreshProgress?.failed += 1
+        metadataRefreshProgress?.errors[id] = message
+    }
+
+    static func metadataRefreshIdentity(_ paper: Paper) -> [String] {
+        let identifiers = [paper.doi.trimmed.lowercased(), paper.arxivLookupID?.lowercased() ?? "",
+                           paper.isbn.replacingOccurrences(of: #"[^0-9Xx]"#, with: "", options: .regularExpression).uppercased()]
+        return identifiers.allSatisfy(\.isEmpty) ? identifiers + [paper.title.trimmed] : identifiers
     }
 
     var papers: [Paper] {
@@ -39,9 +265,20 @@ final class LibraryStore: ObservableObject {
 
     var settings: AppSettings { snapshot.settings }
 
-    static func defaultPersistenceURL() -> URL {
-        if let path = ProcessInfo.processInfo.environment["PAPERMANAGER_LIBRARY_PATH"], !path.isEmpty {
+    static let preferredLibraryPathKey = "PaperManager.PreferredLibraryPath"
+
+    static func defaultPersistenceURL(environment: [String: String] = ProcessInfo.processInfo.environment,
+                                      preferences: UserDefaults = .standard) -> URL {
+        if let path = environment["PAPERMANAGER_LIBRARY_PATH"], !path.isEmpty {
             return URL(fileURLWithPath: path)
+        }
+        if let path = preferences.string(forKey: preferredLibraryPathKey), path.hasPrefix("/") {
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+               !isDirectory.boolValue, FileManager.default.isReadableFile(atPath: url.path) {
+                return url
+            }
         }
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return appSupport.appendingPathComponent("PaperManager", isDirectory: true)
@@ -97,6 +334,14 @@ final class LibraryStore: ObservableObject {
         return result
     }
 
+    /// Legacy UI actions report a recoverable error while retaining the last
+    /// committed value. Never publish an optimistic mutation before its write.
+    @discardableResult
+    private func performReportedMutation(_ mutation: (inout LibrarySnapshot) throws -> Void) -> Bool {
+        do { try performDurableMutation(mutation); return true }
+        catch { statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription); return false }
+    }
+
     /// Uses lossless dates so edits within the same second also invalidate a
     /// restore prepared in another window. The token never leaves this process.
     func snapshotRevisionToken() throws -> Data {
@@ -121,6 +366,13 @@ final class LibraryStore: ObservableObject {
             try FileManager.default.copyItem(at: persistenceURL, to: preserved)
         }
         try writeSnapshot(newSnapshot)
+        // Restored/merged snapshots may deliberately reuse paper IDs and their
+        // identifiers. Requests issued against the previous library must never
+        // fill their fields, even when the provider ignores cancellation. Only
+        // invalidate after the replacement has reached disk successfully.
+        libraryGeneration = UUID()
+        cancelMetadataRefresh()
+        cancelFileOperation()
         snapshot = newSnapshot
         loadError = nil
     }
@@ -133,26 +385,40 @@ final class LibraryStore: ObservableObject {
         try encoder.encode(value).write(to: persistenceURL, options: [.atomic])
     }
 
-    func updateSettings(_ settings: AppSettings) {
-        let previousFormat = snapshot.settings.citekeyFormat
-        snapshot.settings = settings
-        if settings.citekeyFormat != previousFormat {
-            regenerateCitekeysWithoutSaving()
+    @discardableResult
+    func updateSettings(_ settings: AppSettings) -> Bool {
+        performReportedMutation { updated in
+            let previousFormat = updated.settings.citekeyFormat
+            updated.settings = settings
+            if settings.citekeyFormat != previousFormat { Self.regenerateCitekeys(in: &updated) }
         }
-        save()
     }
 
-    func updateSetting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>, value: Value) {
-        let previousFormat = snapshot.settings.citekeyFormat
-        snapshot.settings[keyPath: keyPath] = value
-        if snapshot.settings.citekeyFormat != previousFormat {
-            regenerateCitekeysWithoutSaving()
+    @discardableResult
+    func updateSetting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>, value: Value) -> Bool {
+        performReportedMutation { updated in
+            let previousFormat = updated.settings.citekeyFormat
+            updated.settings[keyPath: keyPath] = value
+            if updated.settings.citekeyFormat != previousFormat { Self.regenerateCitekeys(in: &updated) }
         }
-        save()
+    }
+
+    @discardableResult
+    func updateLocalAPIPort(from input: String) -> Bool {
+        guard let port = Int(input.trimmed), (1...65535).contains(port) else {
+            statusMessage = PMLocalization.text("端口必须是 1–65535 之间的整数。")
+            return false
+        }
+        guard port != settings.localAPIPort else { return true }
+        return updateSetting(\.localAPIPort, value: port)
     }
 
     func paper(with id: UUID) -> Paper? {
         snapshot.papers.first { $0.id == id }
+    }
+
+    func sidebarCounts(includeSubcollections: Bool) -> LibrarySidebarCounts {
+        LibraryQuery.sidebarCounts(in: snapshot, includeSubcollections: includeSubcollections)
     }
 
     func filteredPapers(
@@ -161,94 +427,35 @@ final class LibraryStore: ObservableObject {
         includeSubcollections: Bool,
         sortDescriptor: PaperSortDescriptor = .defaultValue
     ) -> [Paper] {
-        let query = searchText.trimmed.lowercased()
-        let filtered = papers.filter { paper in
-            let matchesFilter: Bool
-            switch filter {
-            case .all:
-                matchesFilter = true
-            case .recentlyAdded:
-                matchesFilter = Date().timeIntervalSince(paper.dateAdded) <= 60 * 60 * 24 * 30
-            case .recentlyOpened:
-                matchesFilter = paper.lastOpenedAt != nil
-            case .unfiled:
-                matchesFilter = paper.collectionIDs.isEmpty
-            case .missingPDF:
-                matchesFilter = !paper.hasPDF
-            case .missingIDs:
-                matchesFilter = !paper.hasIdentifier
-            case .noTags:
-                matchesFilter = paper.tagIDs.isEmpty
-            case .rating(let value):
-                matchesFilter = paper.rating == value
-            case .collection(let id):
-                let ids = includeSubcollections ? snapshot.collections.descendantIDs(of: id) : [id]
-                matchesFilter = paper.collectionIDs.contains { ids.contains($0) }
-            case .tag(let id):
-                matchesFilter = paper.tagIDs.contains(id)
-            }
-
-            guard matchesFilter else { return false }
-            guard !query.isEmpty else { return true }
-            let collectionText = paper.collectionIDs
-                .map { snapshot.collections.path(for: $0) }
-                .joined(separator: " ")
-            let tagText = paper.tagIDs
-                .compactMap { id in snapshot.tags.first(where: { $0.id == id })?.name }
-                .joined(separator: " ")
-            return [
-                paper.title,
-                paper.subtitle ?? "",
-                paper.authorsDisplay,
-                (paper.editors ?? []).joined(separator: " "),
-                (paper.translators ?? []).joined(separator: " "),
-                paper.sourceDisplay,
-                paper.year.map(String.init) ?? "",
-                paper.doi,
-                paper.isbn,
-                paper.eprint,
-                paper.citekey,
-                paper.abstract,
-                paper.notes,
-                collectionText,
-                tagText,
-                paper.customFields.map { "\($0.key) \($0.value)" }.joined(separator: " ")
-            ].joined(separator: " ").lowercased().contains(query)
-        }
-        return sort(filtered, by: sortDescriptor)
+        LibraryQuery.papers(in: snapshot, filter: filter, searchText: searchText,
+                            includeSubcollections: includeSubcollections, sortDescriptor: sortDescriptor)
     }
 
     @discardableResult
     func addPaper(_ incoming: Paper, targetFilter: LibraryFilter? = nil) -> UUID {
-        var paper = incoming
-        paper.id = incoming.id
-        paper.dateAdded = incoming.dateAdded
-        paper.dateModified = Date()
-        apply(targetFilter: targetFilter, to: &paper)
-        normalizeCitekey(for: &paper)
-        snapshot.papers.append(paper)
-        save()
-        return paper.id
+        do { return try addPaperDurably(incoming, targetFilter: targetFilter) }
+        catch { statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription); return incoming.id }
     }
 
     @discardableResult
-    func addPaperDurably(_ incoming: Paper, targetFilter: LibraryFilter? = nil) throws -> UUID {
+    func addPaperDurably(_ incoming: Paper, targetFilter: LibraryFilter? = nil, additionalTags: [PaperTag] = []) throws -> UUID {
         guard paper(with: incoming.id) == nil else { throw PaperManagerError.message("这篇文献已存在。") }
         var paper = incoming
         paper.dateModified = Date()
         apply(targetFilter: targetFilter, to: &paper)
         normalizeCitekey(for: &paper)
         return try performDurableMutation { updated in
+            updated.tags.append(contentsOf: additionalTags)
             updated.papers.append(paper)
             return paper.id
         }
     }
 
-    func updatePaperDurably(_ paper: Paper, targetFilter: LibraryFilter? = nil) throws {
+    func updatePaperDurably(_ paper: Paper, targetFilter: LibraryFilter? = nil, additionalTags: [PaperTag] = []) throws {
         guard let previous = self.paper(with: paper.id) else { throw PaperManagerError.message("文献已被其他窗口移除。") }
         var updated = paper
         apply(targetFilter: targetFilter, to: &updated)
-        guard !previous.hasSameEditableContent(as: updated) else { return }
+        guard !previous.hasSameEditableContent(as: updated) || !additionalTags.isEmpty else { return }
         updated.dateModified = Date()
         let format = snapshot.settings.citekeyFormat
         if updated.citekey.trimmed.isEmpty || updated.citekey != previous.citekey ||
@@ -260,6 +467,7 @@ final class LibraryStore: ObservableObject {
                 throw PaperManagerError.message("文献已被其他窗口移除。")
             }
             snapshot.papers[index] = updated
+            snapshot.tags.append(contentsOf: additionalTags)
         }
     }
 
@@ -282,43 +490,41 @@ final class LibraryStore: ObservableObject {
         return addPaper(incoming, targetFilter: targetFilter)
     }
 
-    func updatePaper(_ paper: Paper) {
-        guard let index = snapshot.papers.firstIndex(where: { $0.id == paper.id }) else { return }
-        guard !snapshot.papers[index].hasSameEditableContent(as: paper) else { return }
-        var updated = paper
-        updated.dateModified = Date()
-        let previous = snapshot.papers[index]
-        let format = snapshot.settings.citekeyFormat
-        if updated.citekey.trimmed.isEmpty || updated.citekey != previous.citekey ||
-            CitekeyGenerator.render(format: format, paper: previous) != CitekeyGenerator.render(format: format, paper: updated) {
-            normalizeCitekey(for: &updated)
-        }
-        snapshot.papers[index] = updated
-        save()
+    @discardableResult
+    func updatePaper(_ paper: Paper) -> Bool {
+        do { try updatePaperDurably(paper); return true }
+        catch { statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription); return false }
     }
 
     func markOpened(_ paperID: UUID) {
         guard let index = snapshot.papers.firstIndex(where: { $0.id == paperID }) else { return }
-        snapshot.papers[index].lastOpenedAt = Date()
-        snapshot.papers[index].dateModified = Date()
-        save()
+        performReportedMutation { updated in
+            updated.papers[index].lastOpenedAt = Date()
+            updated.papers[index].dateModified = Date()
+        }
     }
 
     func updateAnnotations(_ annotations: [ResearchAnnotation], for paperID: UUID) {
         guard let index = snapshot.papers.firstIndex(where: { $0.id == paperID }) else { return }
-        snapshot.papers[index].annotations = annotations
-        snapshot.papers[index].dateModified = Date()
-        save()
+        performReportedMutation { updated in
+            updated.papers[index].annotations = annotations
+            updated.papers[index].dateModified = Date()
+        }
     }
 
-    func deletePapers(ids: Set<UUID>) {
+    @discardableResult
+    func deletePapers(ids: Set<UUID>) -> Bool {
         let deleting = snapshot.papers.filter { ids.contains($0.id) }
-        if snapshot.settings.deleteAttachmentsToTrash {
+        let before = snapshot
+        // Persist record removal first. If the library cannot be written, no
+        // source file is touched; failed Trash operations leave recoverable bytes.
+        guard performReportedMutation({ $0.papers.removeAll { ids.contains($0.id) } }) else { return false }
+        if before.settings.deleteAttachmentsToTrash {
             func canonicalPath(_ attachment: Attachment) -> String {
                 ((try? attachment.resolvedURL()) ?? attachment.url).resolvingSymlinksInPath().standardizedFileURL.path
             }
-            let retained = Set(snapshot.papers.filter { !ids.contains($0.id) }.flatMap(\.attachments).map(canonicalPath))
-            let protected = Set(snapshot.papers.flatMap(\.attachments).filter(\.isReadOnlyReference).map(canonicalPath))
+            let retained = Set(before.papers.filter { !ids.contains($0.id) }.flatMap(\.attachments).map(canonicalPath))
+            let protected = Set(before.papers.flatMap(\.attachments).filter(\.isReadOnlyReference).map(canonicalPath))
             var handled = Set<String>()
             var failed = 0
             for attachment in deleting.flatMap(\.attachments) where !attachment.isReadOnlyReference {
@@ -332,16 +538,15 @@ final class LibraryStore: ObservableObject {
             }
             if failed > 0 { statusMessage = "已移除记录；\(failed) 个文件未能移到废纸篓。" }
         }
-        snapshot.papers.removeAll { ids.contains($0.id) }
-        save()
+        return true
     }
 
     @discardableResult
     func addCollection(name: String = "New Collection", parentID: UUID? = nil) -> UUID {
-        // Compatibility for callers with already-validated fixture data. User
-        // input must use createCollection and present its recoverable error.
+        // Compatibility for legacy callers. User input must use the throwing
+        // createCollection API; a failed disk write must never crash the app.
         do { return try createCollection(name: name, parentID: parentID) }
-        catch { preconditionFailure("Invalid collection request: \(error.localizedDescription)") }
+        catch { statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription); return UUID() }
     }
 
     @discardableResult
@@ -354,8 +559,7 @@ final class LibraryStore: ObservableObject {
         }
         let nextIndex = (snapshot.collections.filter { $0.parentID == parentID }.map(\.sortIndex).max() ?? -1) + 1
         let collection = PaperCollection(name: uniqueCollectionName(base: name, parentID: parentID), parentID: parentID, sortIndex: nextIndex)
-        snapshot.collections.append(collection)
-        save()
+        try performDurableMutation { $0.collections.append(collection) }
         return collection.id
     }
 
@@ -409,11 +613,11 @@ final class LibraryStore: ObservableObject {
         var destination = previousOrder.filter { $0 != id }
         destination.insert(id, at: min(targetIndex, destination.count))
         guard previousParent != parentID || destination != previousOrder else { return true }
-        snapshot.collections[sourceIndex].parentID = parentID
-        setCollectionOrder(orderedCollectionIDs(parentID: previousParent))
-        setCollectionOrder(destination)
-        save()
-        return true
+        return performReportedMutation { updated in
+            updated.collections[sourceIndex].parentID = parentID
+            Self.setCollectionOrder(updated.collections.children(of: previousParent).map(\.id), in: &updated)
+            Self.setCollectionOrder(destination, in: &updated)
+        }
     }
 
     private func collectionSubtreeHeight(id: UUID, visiting: Set<UUID> = []) -> Int? {
@@ -431,7 +635,7 @@ final class LibraryStore: ObservableObject {
         snapshot.collections.children(of: parentID).map(\.id)
     }
 
-    private func setCollectionOrder(_ ids: [UUID]) {
+    private static func setCollectionOrder(_ ids: [UUID], in snapshot: inout LibrarySnapshot) {
         for (order, id) in ids.enumerated() {
             if let index = snapshot.collections.firstIndex(where: { $0.id == id }) {
                 snapshot.collections[index].sortIndex = order
@@ -441,47 +645,51 @@ final class LibraryStore: ObservableObject {
 
     func renameCollection(id: UUID, name: String) {
         guard let index = snapshot.collections.firstIndex(where: { $0.id == id }) else { return }
-        snapshot.collections[index].name = name.trimmed.isEmpty ? "Untitled Collection" : name.trimmed
-        save()
+        performReportedMutation { $0.collections[index].name = name.trimmed.isEmpty ? "Untitled Collection" : name.trimmed }
     }
 
     func deleteCollection(id: UUID) {
         let parentID = snapshot.collections.first { $0.id == id }?.parentID
         let ids = snapshot.collections.descendantIDs(of: id)
-        snapshot.collections.removeAll { ids.contains($0.id) }
-        setCollectionOrder(orderedCollectionIDs(parentID: parentID))
-        for index in snapshot.papers.indices {
-            snapshot.papers[index].collectionIDs.removeAll { ids.contains($0) }
+        performReportedMutation { updated in
+            updated.collections.removeAll { ids.contains($0.id) }
+            Self.setCollectionOrder(updated.collections.children(of: parentID).map(\.id), in: &updated)
+            for index in updated.papers.indices {
+                updated.papers[index].collectionIDs.removeAll { ids.contains($0) }
+            }
         }
-        save()
     }
 
     func addPapers(ids: Set<UUID>, toCollection collectionID: UUID) {
         guard snapshot.collections.contains(where: { $0.id == collectionID }) else { return }
-        var didChange = false
-        for index in snapshot.papers.indices where ids.contains(snapshot.papers[index].id) {
-            if !snapshot.papers[index].collectionIDs.contains(collectionID) {
-                snapshot.papers[index].collectionIDs.append(collectionID)
-                snapshot.papers[index].dateModified = Date()
-                didChange = true
+        guard snapshot.papers.contains(where: { ids.contains($0.id) && !$0.collectionIDs.contains(collectionID) }) else { return }
+        performReportedMutation { updated in
+            for index in updated.papers.indices where ids.contains(updated.papers[index].id) {
+                if !updated.papers[index].collectionIDs.contains(collectionID) {
+                    updated.papers[index].collectionIDs.append(collectionID)
+                    updated.papers[index].dateModified = Date()
+                }
             }
         }
-        if didChange { save() }
     }
 
     @discardableResult
     func addTag(name: String = "New Tag", colorHex: String = "#5B8DEF") -> UUID {
+        do { return try createTag(name: name, colorHex: colorHex) }
+        catch { statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription); return UUID() }
+    }
+
+    @discardableResult
+    func createTag(name: String = "New Tag", colorHex: String = "#5B8DEF") throws -> UUID {
         let nextIndex = (snapshot.tags.map(\.sortIndex).max() ?? -1) + 1
         let tag = PaperTag(name: uniqueTagName(base: name), colorHex: Self.normalizedTagColor(colorHex) ?? "#5B8DEF", sortIndex: nextIndex)
-        snapshot.tags.append(tag)
-        save()
+        try performDurableMutation { $0.tags.append(tag) }
         return tag.id
     }
 
     func renameTag(id: UUID, name: String) {
         guard let index = snapshot.tags.firstIndex(where: { $0.id == id }) else { return }
-        snapshot.tags[index].name = name.trimmed.isEmpty ? "Untitled Tag" : name.trimmed
-        save()
+        performReportedMutation { $0.tags[index].name = name.trimmed.isEmpty ? "Untitled Tag" : name.trimmed }
     }
 
     func updateTagColor(id: UUID, colorHex: String) {
@@ -490,8 +698,7 @@ final class LibraryStore: ObservableObject {
             statusMessage = "请输入有效的十六进制颜色，例如 #5B8DEF。"
             return
         }
-        snapshot.tags[index].colorHex = normalized
-        save()
+        performReportedMutation { $0.tags[index].colorHex = normalized }
     }
 
     static func normalizedTagColor(_ colorHex: String) -> String? {
@@ -510,37 +717,35 @@ final class LibraryStore: ObservableObject {
         var ordered = previous.filter { $0 != id }
         ordered.insert(id, at: min(targetIndex, ordered.count))
         guard ordered != previous else { return true }
-        setTagOrder(ordered)
-        save()
-        return true
+        return performReportedMutation { Self.setTagOrder(ordered, in: &$0) }
     }
 
-    private func setTagOrder(_ ids: [UUID]) {
+    private static func setTagOrder(_ ids: [UUID], in snapshot: inout LibrarySnapshot) {
         for (order, id) in ids.enumerated() {
             if let index = snapshot.tags.firstIndex(where: { $0.id == id }) { snapshot.tags[index].sortIndex = order }
         }
     }
 
     func deleteTag(id: UUID) {
-        snapshot.tags.removeAll { $0.id == id }
-        setTagOrder(tags.map(\.id))
-        for index in snapshot.papers.indices {
-            snapshot.papers[index].tagIDs.removeAll { $0 == id }
+        let remaining = tags.map(\.id).filter { $0 != id }
+        performReportedMutation { updated in
+            updated.tags.removeAll { $0.id == id }
+            Self.setTagOrder(remaining, in: &updated)
+            for index in updated.papers.indices { updated.papers[index].tagIDs.removeAll { $0 == id } }
         }
-        save()
     }
 
     func addPapers(ids: Set<UUID>, toTag tagID: UUID) {
         guard snapshot.tags.contains(where: { $0.id == tagID }) else { return }
-        var didChange = false
-        for index in snapshot.papers.indices where ids.contains(snapshot.papers[index].id) {
-            if !snapshot.papers[index].tagIDs.contains(tagID) {
-                snapshot.papers[index].tagIDs.append(tagID)
-                snapshot.papers[index].dateModified = Date()
-                didChange = true
+        guard snapshot.papers.contains(where: { ids.contains($0.id) && !$0.tagIDs.contains(tagID) }) else { return }
+        performReportedMutation { updated in
+            for index in updated.papers.indices where ids.contains(updated.papers[index].id) {
+                if !updated.papers[index].tagIDs.contains(tagID) {
+                    updated.papers[index].tagIDs.append(tagID)
+                    updated.papers[index].dateModified = Date()
+                }
             }
         }
-        if didChange { save() }
     }
 
     func attachManagedFile(_ sourceURL: URL, to paperID: UUID, kind: AttachmentKind? = nil, replacePrimary: Bool = false) throws {
@@ -598,11 +803,10 @@ final class LibraryStore: ObservableObject {
     }
 
     func regenerateCitekeys() {
-        regenerateCitekeysWithoutSaving()
-        save()
+        performReportedMutation { Self.regenerateCitekeys(in: &$0) }
     }
 
-    private func regenerateCitekeysWithoutSaving() {
+    private static func regenerateCitekeys(in snapshot: inout LibrarySnapshot) {
         var existing = Set<String>()
         let orderedIndices = snapshot.papers.indices.sorted { left, right in
             let lhs = snapshot.papers[left]
@@ -657,51 +861,6 @@ final class LibraryStore: ObservableObject {
         paper.citekey = CitekeyGenerator.generate(for: paper, format: snapshot.settings.citekeyFormat, existing: existing)
     }
 
-    private func sort(_ papers: [Paper], by descriptor: PaperSortDescriptor) -> [Paper] {
-        papers.sorted { lhs, rhs in
-            let comparison: ComparisonResult
-            switch descriptor.field {
-            case .title:
-                comparison = lhs.displayTitle.localizedStandardCompare(rhs.displayTitle)
-            case .authors:
-                comparison = lhs.authorsDisplay.localizedStandardCompare(rhs.authorsDisplay)
-            case .year:
-                comparison = compareOptional(lhs.year, rhs.year)
-            case .source:
-                comparison = lhs.sourceDisplay.localizedStandardCompare(rhs.sourceDisplay)
-            case .rating:
-                comparison = compareValues(lhs.rating, rhs.rating)
-            case .dateAdded:
-                comparison = compareValues(lhs.dateAdded, rhs.dateAdded)
-            case .lastOpened:
-                comparison = compareOptional(lhs.lastOpenedAt, rhs.lastOpenedAt)
-            }
-
-            if comparison == .orderedSame {
-                return lhs.displayTitle.localizedStandardCompare(rhs.displayTitle) == .orderedAscending
-            }
-            return descriptor.ascending ? comparison == .orderedAscending : comparison == .orderedDescending
-        }
-    }
-
-    private func compareValues<Value: Comparable>(_ lhs: Value, _ rhs: Value) -> ComparisonResult {
-        if lhs == rhs { return .orderedSame }
-        return lhs < rhs ? .orderedAscending : .orderedDescending
-    }
-
-    private func compareOptional<Value: Comparable>(_ lhs: Value?, _ rhs: Value?) -> ComparisonResult {
-        switch (lhs, rhs) {
-        case (.none, .none):
-            return .orderedSame
-        case (.none, .some):
-            return .orderedAscending
-        case (.some, .none):
-            return .orderedDescending
-        case (.some(let lhs), .some(let rhs)):
-            return compareValues(lhs, rhs)
-        }
-    }
-
     private func uniqueCollectionName(base: String, parentID: UUID?) -> String {
         uniqueName(base: base, existing: Set(snapshot.collections.filter { $0.parentID == parentID }.map(\.name)))
     }
@@ -728,7 +887,149 @@ final class LibraryStore: ObservableObject {
         try performFileOperation(paperIDs: paperIDs, renameOnly: true)
     }
 
+    /// A single library-owned queue keeps file IO off the main actor. Each
+    /// attachment is committed independently, so stopping preserves completed
+    /// work and rolls back only a placement whose metadata was not committed.
+    @discardableResult
+    func enqueueFileOperation(paperIDs: Set<UUID>, renameOnly: Bool = false) -> Bool {
+        guard !Self.fileOperationShutdownRequested else { return false }
+        guard !isFileOperationRunning else { return false }
+        guard loadError == nil else { statusMessage = "当前文库无法读取，已停止文件操作。"; return false }
+        if !renameOnly, !FileLibraryService.status(for: settings).isAvailable {
+            statusMessage = "请先在设置中配置或修复文件库，再整理现有文件。"; return false
+        }
+        let jobs = snapshot.papers.filter { paperIDs.contains($0.id) }.flatMap { paper in
+            paper.attachments.map { (paper.id, $0.id) }
+        }
+        guard !jobs.isEmpty else { return false }
+        fileOperationProgress = FileOperationProgress(total: jobs.count)
+        let generation = libraryGeneration
+        fileOperationTask = Task { [weak self] in
+            await self?.runFileOperation(jobs: jobs, renameOnly: renameOnly, generation: generation)
+        }
+        return true
+    }
+
+    func cancelFileOperation() { fileOperationTask?.cancel() }
+    func waitForFileOperation() async { await fileOperationTask?.value }
+
+    private func fileWorker<Value>(_ operation: @escaping () throws -> Value) async throws -> Value {
+        let worker = Task.detached(priority: .utility, operation: operation)
+        return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+    }
+
+    private func runFileOperation(jobs: [(UUID, UUID)], renameOnly: Bool, generation: UUID) async {
+        var confirmed = !settings.confirmBeforeMovingFiles
+        defer {
+            fileOperationProgress?.cancelled = Task.isCancelled || generation != libraryGeneration
+            fileOperationProgress?.isRunning = false
+            fileOperationTask = nil
+            if generation == libraryGeneration, let progress = fileOperationProgress {
+                let summary = FileOperationSummary(completed: progress.completed, unchanged: progress.unchanged + progress.failed,
+                                                   messages: progress.messages)
+                statusMessage = progress.cancelled ? "文件操作已停止。\(summary.text)" : summary.text
+            }
+        }
+        for (paperID, attachmentID) in jobs {
+            if Task.isCancelled || generation != libraryGeneration { break }
+            guard let original = paper(with: paperID), let attachment = original.attachments.first(where: { $0.id == attachmentID }) else {
+                fileOperationProgress?.unchanged += 1; continue
+            }
+            let baseline = snapshot
+            do {
+                let plan = try await fileWorker {
+                    try attachment.withResolvedURL { source in
+                        try renameOnly ? FileLibraryService.renamePlan(attachment: attachment, paper: original, snapshot: baseline)
+                            : FileLibraryService.plan(source: source, paper: original, snapshot: baseline, attachmentID: attachment.id,
+                                                      explicitOrganization: true, kind: attachment.kind)
+                    }
+                }
+                try Task.checkCancellation()
+                guard generation == libraryGeneration else { break }
+                guard paper(with: paperID)?.attachments.first(where: { $0.id == attachmentID }) == attachment else {
+                    fileOperationProgress?.unchanged += 1; continue
+                }
+                guard plan.changesLocation else { fileOperationProgress?.unchanged += 1; continue }
+                if !confirmed {
+                    guard confirmOrganizationOperation(mode: plan.action, source: plan.source, destination: plan.destination) else {
+                        fileOperationTask?.cancel(); break
+                    }
+                    confirmed = true
+                }
+                try Task.checkCancellation()
+                guard generation == libraryGeneration else { break }
+                let placement = filePlacement
+                let outcome = try await fileWorker {
+                    try attachment.withResolvedURL { _ in
+                        let receipt = try placement(plan)
+                        var updated = attachment
+                        updated.filePath = plan.destination.path
+                        updated.displayName = plan.destination.lastPathComponent
+                        let access = plan.authorizedRoot?.startAccessingSecurityScopedResource() ?? false
+                        defer { if access { plan.authorizedRoot?.stopAccessingSecurityScopedResource() } }
+                        updated.bookmarkData = try? plan.destination.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+                        updated.isReadOnlyReference = false; updated.missing = false
+                        return FileOperationOutcome(attachment: updated, receipt: receipt)
+                    }
+                }
+                do {
+                    try Task.checkCancellation()
+                    guard generation == libraryGeneration,
+                          let current = paper(with: paperID),
+                          current.attachments.first(where: { $0.id == attachmentID }) == attachment else {
+                        throw PaperManagerError.message("文件操作期间文库或附件已更改，已撤销当前文件操作。")
+                    }
+                    if plan.action == .move {
+                        let paths = Set([plan.source.path, plan.destination.path])
+                        let newlyShared = snapshot.papers.contains { item in
+                            item.attachments.contains { candidate in
+                                !(item.id == paperID && candidate.id == attachmentID)
+                                    && paths.contains(FileLibraryService.resolvedCanonicalURL(for: candidate).path)
+                            }
+                        }
+                        guard !newlyShared else { throw PaperManagerError.message("文件现在被其他附件引用，已撤销移动。") }
+                    }
+                    try performDurableMutation { updated in
+                        guard let index = updated.papers.firstIndex(where: { $0.id == paperID }),
+                              let fileIndex = updated.papers[index].attachments.firstIndex(where: { $0.id == attachmentID }) else {
+                            throw PaperManagerError.message("文献或附件已移除。")
+                        }
+                        updated.papers[index].attachments[fileIndex] = outcome.attachment
+                        updated.papers[index].dateModified = Date()
+                    }
+                    fileOperationProgress?.completed += 1
+                } catch {
+                    if let receipt = outcome.receipt {
+                        // A new record may have adopted the destination while
+                        // IO was in flight. Restore our old source, but retain
+                        // that now-referenced destination rather than breaking
+                        // a concurrently committed relationship.
+                        let preserveDestination = snapshot.papers.contains { item in
+                            item.attachments.contains { candidate in
+                                !(item.id == paperID && candidate == attachment)
+                                    && FileLibraryService.resolvedCanonicalURL(for: candidate).path == plan.destination.path
+                            }
+                        }
+                        do { try await Task.detached(priority: .utility) {
+                            try attachment.withResolvedURL { _ in try receipt.rollback(preservingDestination: preserveDestination) }
+                        }.value }
+                        catch { fileOperationProgress?.messages.append("撤销当前文件操作失败，已保留文件以避免覆盖：\(error.localizedDescription)") }
+                    }
+                    throw error
+                }
+            } catch {
+                if error is CancellationError || Task.isCancelled || generation != libraryGeneration { break }
+                fileOperationProgress?.failed += 1
+                fileOperationProgress?.messages.append("\(attachment.displayName)：\(error.localizedDescription)")
+            }
+            if let progress = fileOperationProgress, generation == libraryGeneration {
+                statusMessage = "正在处理文件 \(progress.processed)/\(progress.total)：\(original.displayTitle)"
+            }
+        }
+    }
+
     private func performFileOperation(paperIDs: Set<UUID>, renameOnly: Bool) throws -> FileOperationSummary {
+        guard !isFileOperationRunning else { throw PaperManagerError.message("文件操作正在进行，请先停止或等待完成。") }
         if !renameOnly, !FileLibraryService.status(for: settings).isAvailable {
             throw PaperManagerError.message("请先在设置中配置或修复文件库，再整理现有文件。")
         }

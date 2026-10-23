@@ -35,6 +35,21 @@ struct LocalizationTemplateTests {
             try expect(context["type"] == "article" && paper.paperType.bibTeXType == "article", "A machine type changed with UI language")
             try expect(ExportService.bibTeX(for: [paper]).contains("title = {全部文献}"), "Export translated a paper title")
         }
+        run("MCP command ports stay ungrouped in both UI languages") {
+            let key = """
+            请为当前 AI 客户端配置 PaperManager MCP。
+            名称: papermanager
+            可执行文件: %@
+            参数: --port %@ --read-only mcp
+            先检查现有配置，修改前征求同意。不要更改 PaperManager 的本地 API 或只读设置。
+            """
+            for language in ["zh-Hans", "en"] {
+                PMLocalization.configure(language)
+                let instructions = PMLocalization.format(key, "/Owned/PaperManagerCLI", String(29467))
+                try expect(instructions.contains("--port 29467 --read-only mcp"), "\(language) formatted a non-executable MCP port")
+                try expect(!instructions.contains("29,467"), "\(language) introduced digit grouping into a command")
+            }
+        }
         run("Old snapshots retain independent metadata and annotation template strings") {
             var original = LibrarySnapshot.empty
             original.settings.metadataTemplate = "Legacy {{title}}"

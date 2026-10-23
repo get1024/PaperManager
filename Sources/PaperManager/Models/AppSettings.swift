@@ -109,12 +109,8 @@ struct AppSettings: Codable, Hashable {
 
     var localAPIEnabled: Bool = false
     var localAPIReadOnly: Bool = false
-    var browserExtensionEnabled: Bool = true
     var localAPIPort: Int = 29467
     var browserUploadFolder: String = ""
-
-    var freePaperLimit: Int = 50
-    var proUnlocked: Bool = false
 
     static let defaults = AppSettings()
 

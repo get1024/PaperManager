@@ -128,20 +128,67 @@ struct PaperMetadata: Codable, Hashable {
 }
 
 enum MetadataLookupClient {
-    static func lookup(doi: String?, arxivID: String?, isbn: String?, title: String?) async throws -> PaperMetadata {
-        if let doi = doi?.nilIfBlank {
-            return try await CrossrefClient.fetch(doi: doi)
+    static func normalizedArxivID(_ identifier: String) -> String {
+        var value = identifier.trimmed
+            .replacingOccurrences(of: #"(?i)^arxiv:\s*"#, with: "", options: .regularExpression)
+        if let url = URL(string: value), let host = url.host?.lowercased(),
+           host == "arxiv.org" || host.hasSuffix(".arxiv.org") {
+            let path = url.path
+            if path.hasPrefix("/abs/") { value = String(path.dropFirst(5)) }
+            else if path.hasPrefix("/pdf/") { value = String(path.dropFirst(5)) }
         }
-        if let arxivID = arxivID?.nilIfBlank {
-            return try await ArxivClient.fetch(arxivID: arxivID)
+        return value.replacingOccurrences(of: #"(?i)\.pdf$"#, with: "", options: .regularExpression)
+    }
+
+    /// Keep provider dependencies injectable so cancellation and fallback can be
+    /// verified without sending a user's bibliography to external services.
+    struct Sources {
+        var doi: (String) async throws -> PaperMetadata
+        var arxiv: (String) async throws -> PaperMetadata
+        var isbn: (String) async throws -> PaperMetadata
+        var title: (String) async throws -> PaperMetadata
+
+        static var live: Sources {
+            Sources(doi: CrossrefClient.fetch, arxiv: ArxivClient.fetch,
+                    isbn: OpenLibraryClient.fetch, title: CrossrefClient.search)
         }
-        if let isbn = isbn?.nilIfBlank {
-            return try await OpenLibraryClient.fetch(isbn: isbn)
+    }
+
+    static func lookup(doi: String?, arxivID: String?, isbn: String?, title: String?, sources: Sources = .live) async throws -> PaperMetadata {
+        let cleanDOI = doi?.trimmed
+            .replacingOccurrences(of: #"(?i)^https?://(?:dx\.)?doi\.org/"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)^doi:\s*"#, with: "", options: .regularExpression).nilIfBlank
+        // arXiv's DataCite DOIs are not generally present in Crossref. Resolve
+        // their embedded identifier directly rather than failing every refresh.
+        let arxivPrefix = "10.48550/arxiv."
+        let embeddedArxivID = cleanDOI.flatMap { value in
+            value.lowercased().hasPrefix(arxivPrefix) ? String(value.dropFirst(arxivPrefix.count)).nilIfBlank : nil
         }
-        if let title = title?.nilIfBlank {
-            return try await CrossrefClient.search(bibliographicQuery: title)
+        let cleanArxivID = (arxivID?.nilIfBlank ?? embeddedArxivID).map(normalizedArxivID)
+        var attempts: [(String, (String) async throws -> PaperMetadata)] = []
+        if let cleanArxivID, embeddedArxivID != nil { attempts.append((cleanArxivID, sources.arxiv)) }
+        if let cleanDOI, embeddedArxivID == nil { attempts.append((cleanDOI, sources.doi)) }
+        if let cleanArxivID, embeddedArxivID == nil { attempts.append((cleanArxivID, sources.arxiv)) }
+        if let isbn = isbn?.nilIfBlank { attempts.append((isbn, sources.isbn)) }
+        // A title search may return a different work; only use it when no exact
+        // identifier was supplied. A failed identifier must remain a failure.
+        if attempts.isEmpty, let title = title?.nilIfBlank { attempts.append((title, sources.title)) }
+        guard !attempts.isEmpty else {
+            throw PaperManagerError.message("Provide at least one of DOI, arXiv ID, ISBN, or title.")
         }
-        throw PaperManagerError.message("Provide at least one of DOI, arXiv ID, ISBN, or title.")
+        var lastError: Error = PaperManagerError.message("No paper found for this query.")
+        for (query, provider) in attempts {
+            try Task.checkCancellation()
+            do {
+                let result = try await provider(query)
+                try Task.checkCancellation()
+                return result
+            } catch {
+                if error is CancellationError || Task.isCancelled { throw CancellationError() }
+                lastError = error
+            }
+        }
+        throw lastError
     }
 }
 
@@ -354,13 +401,10 @@ private struct CrossrefWork: Decodable {
     }
 }
 
-private enum ArxivClient {
+enum ArxivClient {
     static func fetch(arxivID: String) async throws -> PaperMetadata {
-        let cleanID = arxivID
-            .trimmed
-            .replacingOccurrences(of: #"(?i)^arxiv:\s*"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"\.pdf$"#, with: "", options: .regularExpression)
-        guard !cleanID.isEmpty,
+        let cleanID = MetadataLookupClient.normalizedArxivID(arxivID)
+        guard cleanID.looksLikeArxivID,
               var components = URLComponents(string: "https://export.arxiv.org/api/query") else {
             throw PaperManagerError.message("Enter an arXiv ID.")
         }
@@ -377,6 +421,10 @@ private enum ArxivClient {
             throw PaperManagerError.message("No paper found for this arXiv ID.")
         }
 
+        return try parse(data: data, requestedID: cleanID)
+    }
+
+    static func parse(data: Data, requestedID cleanID: String) throws -> PaperMetadata {
         let parser = XMLParser(data: data)
         let delegate = ArxivParserDelegate(requestedID: cleanID)
         parser.delegate = delegate
@@ -421,6 +469,7 @@ private final class ArxivParserDelegate: NSObject, XMLParserDelegate {
         buffer = ""
         if name == "entry" {
             inEntry = true
+            title = ""; summary = ""; published = ""; entryID = ""; doi = ""; authors = []
         } else if inEntry, name == "author" {
             inAuthor = true
         }
@@ -457,6 +506,12 @@ private final class ArxivParserDelegate: NSObject, XMLParserDelegate {
             inAuthor = false
         case "entry":
             inEntry = false
+            let receivedID = MetadataLookupClient.normalizedArxivID(entryID)
+            let stripVersion = { (value: String) in
+                value.replacingOccurrences(of: #"v\d+$"#, with: "", options: .regularExpression).lowercased()
+            }
+            guard receivedID.looksLikeArxivID, !title.isEmpty,
+                  stripVersion(receivedID) == stripVersion(requestedID) else { return }
             var result = PaperMetadata()
             result.title = title
             result.authors = authors

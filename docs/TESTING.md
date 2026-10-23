@@ -5,7 +5,7 @@
 | 命令 | 范围 |
 |---|---|
 | `scripts/test.sh core` | 文献/引用、实际 TCP/API、归档、编辑、文集标签、文件库、Zotero、导入备份、语言模板、Intents、CLI/MCP/浏览器逻辑 |
-| `scripts/test.sh ui` | 原生表格、真实 App/WindowGroup 的尺寸与面板收放、设置页五个面板 |
+| `scripts/test.sh ui` | 原生表格、App/WindowGroup 尺寸与面板、设置协调、添加表单、标注操作、检查器选区/hover 几何及直接编辑 |
 | `scripts/test.sh all` | core + ui |
 | `scripts/test.sh ax` | 独立外部 AX 客户端、检查器崩溃回归和全表辅助功能压力测量 |
 
@@ -18,3 +18,5 @@
 `test-native-window-group.sh` 包含九个阶段，覆盖不同窗口尺寸、侧栏/检查器收放及选择变化。可设置 `PAPERMANAGER_GEOMETRY_NEGATIVE_CONTROL=1` 在临时源副本移除尺寸修复作负控；负控应失败。
 
 CI 在主分支构建前运行 core 和项目成员检查，再使用完整 Xcode 构建 app/CLI，签名并产生安装包。测试通过不等于 Shortcuts 注册、Safari 发行或所有视觉操作已验收。
+
+侧栏计数包含多文集共享祖先去重和子文集开关；服务回归还覆盖查询排序、API 重复配置及替换监听的生命周期。标题选区和 hover 几何测试已纳入 UI 组；它们不替代真人鼠标、跨屏或输入法验证。

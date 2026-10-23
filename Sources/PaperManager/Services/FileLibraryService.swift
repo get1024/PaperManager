@@ -55,8 +55,10 @@ struct FilePlacementReceipt {
 
     /// Restore a moved source before removing our new copy. Never replace a
     /// source or destination changed by another operation in the meantime.
-    func rollback() throws {
+    func rollback(preservingDestination: Bool = false) throws {
         guard plan.changesLocation, let writtenIdentity else { return }
+        let access = plan.authorizedRoot?.startAccessingSecurityScopedResource() ?? false
+        defer { if access { plan.authorizedRoot?.stopAccessingSecurityScopedResource() } }
         guard try FileLibraryFileIdentity.read(plan.destination) == writtenIdentity else {
             throw PaperManagerError.message("文件已被其他操作更改；已保留现有文件，请检查文件库。")
         }
@@ -64,7 +66,7 @@ struct FilePlacementReceipt {
             guard !FileManager.default.fileExists(atPath: plan.source.path) else {
                 throw PaperManagerError.message("原位置出现了其他文件；已保留文件库副本，未覆盖原位置。")
             }
-            if movedByRename {
+            if movedByRename && !preservingDestination {
                 guard renamex_np(plan.destination.path, plan.source.path, UInt32(RENAME_EXCL)) == 0 else {
                     throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
                 }
@@ -72,7 +74,7 @@ struct FilePlacementReceipt {
             }
             try FileLibraryService.copyNoOverwrite(from: plan.destination, to: plan.source)
         }
-        try FileManager.default.removeItem(at: plan.destination)
+        if !preservingDestination { try FileManager.default.removeItem(at: plan.destination) }
     }
 }
 
@@ -84,6 +86,17 @@ struct FileOperationSummary {
         let summary = "已处理 \(completed) 个文件，\(unchanged) 个保持原位"
         return messages.isEmpty ? summary : summary + "。" + messages.joined(separator: "；")
     }
+}
+
+struct FileOperationProgress {
+    var total = 0
+    var completed = 0
+    var unchanged = 0
+    var failed = 0
+    var cancelled = false
+    var isRunning = true
+    var messages: [String] = []
+    var processed: Int { completed + unchanged + failed }
 }
 
 fileprivate struct FileLibraryFileIdentity: Equatable {
@@ -202,7 +215,8 @@ enum FileLibraryService {
         return FilePlacementPlan(source: source, destination: destination, action: .move, identity: try FileLibraryFileIdentity.read(source))
     }
 
-    static func execute(_ plan: FilePlacementPlan) throws -> FilePlacementReceipt {
+    static func execute(_ plan: FilePlacementPlan, checkCancellation: () throws -> Void = {}) throws -> FilePlacementReceipt {
+        try checkCancellation()
         guard plan.changesLocation else { return FilePlacementReceipt(plan: plan, writtenIdentity: nil) }
         let access = plan.authorizedRoot?.startAccessingSecurityScopedResource() ?? false
         defer { if access { plan.authorizedRoot?.stopAccessingSecurityScopedResource() } }
@@ -219,12 +233,13 @@ enum FileLibraryService {
         }
         // Reserve the destination with O_EXCL/O_NOFOLLOW. Neither an existing
         // file nor a dangling link created after planning can be overwritten.
-        try copyNoOverwrite(from: plan.source, to: plan.destination)
+        try copyNoOverwrite(from: plan.source, to: plan.destination, checkCancellation: checkCancellation)
         let identity = try FileLibraryFileIdentity.read(plan.destination)
         do {
             guard try FileLibraryFileIdentity.read(plan.source) == plan.identity else {
                 throw PaperManagerError.message("源文件在复制期间发生更改，操作已取消。")
             }
+            try checkCancellation()
             if plan.action == .move { try FileManager.default.removeItem(at: plan.source) }
             return FilePlacementReceipt(plan: plan, writtenIdentity: identity)
         } catch {
@@ -351,7 +366,7 @@ enum FileLibraryService {
         }
     }
 
-    fileprivate static func copyNoOverwrite(from source: URL, to destination: URL) throws {
+    fileprivate static func copyNoOverwrite(from source: URL, to destination: URL, checkCancellation: () throws -> Void = {}) throws {
         let input = open(source.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard input >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
         defer { close(input) }
@@ -361,6 +376,7 @@ enum FileLibraryService {
         do {
             var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
             while true {
+                try checkCancellation()
                 let count = buffer.withUnsafeMutableBytes { read(input, $0.baseAddress!, $0.count) }
                 if count < 0, errno == EINTR { continue }
                 guard count >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }

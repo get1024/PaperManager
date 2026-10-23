@@ -10,13 +10,6 @@ enum ExportService {
         papers.map { risRecord($0, settings: settings, tags: tags) }.joined(separator: "\n")
     }
 
-    static func detailedMarkdown(for papers: [Paper], snapshot: LibrarySnapshot) -> [(filename: String, text: String)] {
-        papers.map { paper in
-            let filename = (paper.citekey.nilIfBlank ?? paper.displayTitle).sanitizedFileName()
-            return (filename + ".md", TemplateRenderer.renderMetadata(paper: paper, snapshot: snapshot))
-        }
-    }
-
     static func writeBibTeX(_ papers: [Paper], to url: URL, settings: AppSettings? = nil, tags: [PaperTag] = []) throws {
         try bibTeX(for: papers, settings: settings, tags: tags).write(to: url, atomically: true, encoding: .utf8)
     }
@@ -210,13 +203,21 @@ enum ExportService {
         let bundleURL = uniqueDirectoryURL(folder.appendingPathComponent(baseName).appendingPathExtension("textbundle"))
         let assetsURL = bundleURL.appendingPathComponent("assets", isDirectory: true)
         try FileManager.default.createDirectory(at: assetsURL, withIntermediateDirectories: true)
+        var completed = false
+        defer { if !completed { try? FileManager.default.removeItem(at: bundleURL) } }
+        let info: [String: Any] = ["version": 2, "type": "net.daringfireball.markdown", "transient": false,
+                                  "creatorIdentifier": "com.aurelian.PaperManager"]
+        try JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted, .sortedKeys])
+            .write(to: bundleURL.appendingPathComponent("info.json"), options: .atomic)
 
         var relativeImagePaths: [UUID: String] = [:]
         var imageIndex = 1
         for annotation in paper.annotations {
             guard let path = annotation.imageFilePath?.nilIfBlank else { continue }
             let source = URL(fileURLWithPath: path)
-            guard FileManager.default.fileExists(atPath: source.path) else { continue }
+            guard FileManager.default.fileExists(atPath: source.path) else {
+                throw PaperManagerError.message("标注图片不存在，未导出不完整的 TextBundle：\(source.lastPathComponent)")
+            }
             let ext = source.pathExtension.nilIfBlank ?? "png"
             let destinationName = "annotation-\(imageIndex).\(ext)"
             try FileManager.default.copyItem(at: source, to: assetsURL.appendingPathComponent(destinationName))
@@ -228,10 +229,11 @@ enum ExportService {
             paper: paper,
             snapshot: snapshot,
             annotationImagePath: { annotation in
-                relativeImagePaths[annotation.id] ?? annotation.imageFilePath ?? ""
+                relativeImagePaths[annotation.id] ?? ""
             }
         )
         try text.write(to: bundleURL.appendingPathComponent("text.md"), atomically: true, encoding: .utf8)
+        completed = true
     }
 
     private static func uniqueFileURL(_ url: URL) -> URL {

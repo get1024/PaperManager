@@ -105,13 +105,20 @@ enum ImportService {
 
     static func commit(_ plan: ImportPlan, into store: LibraryStore, targetFilter: LibraryFilter?) async -> ImportSummary {
         var summary = ImportSummary(skipped: plan.unsupportedFiles, failed: plan.failures.count, messages: plan.failures)
+        var refreshIDs: [UUID] = []
+        var importedPDFs: [UUID: Paper] = [:]
+        // Metadata lookup starts only after committed imports are visible. The
+        // shared bounded queue also covers BibTeX/RIS and ISBN/title-only works.
+        defer {
+            if store.settings.autoExtractMetadataAfterImport {
+                store.enqueueMetadataRefresh(paperIDs: refreshIDs, replacingUneditedFieldsFrom: importedPDFs)
+            }
+        }
         for candidate in plan.candidates {
             if Task.isCancelled { break }
             guard candidate.isSelected else { summary.skipped += 1; continue }
             do {
-                var incoming = candidate.paper
-                if candidate.sourceURL != nil, store.settings.autoExtractMetadataAfterImport,
-                   let enriched = try? await enrichIfPossible(paper: incoming) { incoming = enriched }
+                let incoming = candidate.paper
                 if Task.isCancelled { break }
                 let targetMissing: Bool
                 switch targetFilter {
@@ -169,6 +176,8 @@ enum ImportService {
                     }
                     throw error
                 }
+                refreshIDs.append(id)
+                if candidate.sourceURL != nil { importedPDFs[id] = store.paper(with: id) }
                 if duplicate == nil, candidate.sourceURL != nil, store.settings.autoExtractAnnotationsAfterImport,
                    let attachment = store.paper(with: id)?.primaryPDF {
                     let previousAnnotations = store.paper(with: id)?.annotations ?? []
@@ -195,16 +204,6 @@ enum ImportService {
         return summary
     }
 
-    static func addViaDOI(_ doi: String, into store: LibraryStore, targetFilter: LibraryFilter?) async throws -> UUID {
-        let metadata = try await MetadataLookupClient.lookup(doi: doi, arxivID: nil, isbn: nil, title: nil)
-        return store.addOrReplacePaper(metadata.asPaper, targetFilter: targetFilter)
-    }
-
-    static func addViaLookup(_ query: String, into store: LibraryStore, targetFilter: LibraryFilter?) async throws -> UUID {
-        let paper = try await lookupPaper(query)
-        return store.addOrReplacePaper(paper, targetFilter: targetFilter)
-    }
-
     static func lookupPaper(_ query: String) async throws -> Paper {
         let clean = query.trimmed
         let metadata = try await MetadataLookupClient.lookup(
@@ -227,16 +226,6 @@ enum ImportService {
                 return PDFMetadataExtractor.extractAnnotations(from: document, imageDirectory: imageDirectory, paperID: paperID)
             }
         }.value
-    }
-
-    private static func enrichIfPossible(paper: Paper) async throws -> Paper {
-        let metadata = try await MetadataLookupClient.lookup(
-            doi: paper.doi.nilIfBlank,
-            arxivID: paper.arxivLookupID,
-            isbn: nil,
-            title: nil
-        )
-        return metadata.merged(into: paper, replaceExisting: true)
     }
 
     private static func expand(urls: [URL]) -> [URL] {

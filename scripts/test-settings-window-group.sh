@@ -10,7 +10,9 @@ mkdir -p "$TEST_WORK_DIR/Sources" "$TASK_ROOT/.build/test-module-cache" "$REPORT
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
   "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/SettingsView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/HelpView.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/ZoteroImportView.swift" \
   "$TASK_ROOT/Tests/SettingsWindowGroupSmoke.swift" "$TEST_WORK_DIR/Sources/"
 /usr/bin/xcrun swiftc -swift-version 5 -whole-module-optimization \

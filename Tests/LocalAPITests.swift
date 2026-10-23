@@ -57,6 +57,38 @@ struct LocalAPITests {
         fixture.tagIDs = [tag]
         fixture.attachments = [Attachment(kind: .pdf, filePath: original.path, displayName: original.lastPathComponent, isReadOnlyReference: true)]
         let id = store.addPaper(fixture)
+
+        await run("Legacy purchase and extension settings do not prevent loading or survive a new save") {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            let encoded = try encoder.encode(store.snapshot)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let expected = try decoder.decode(LibrarySnapshot.self, from: encoded)
+            var legacy = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+            var settings = legacy["settings"] as! [String: Any]
+            settings["freePaperLimit"] = 1
+            settings["proUnlocked"] = false
+            settings["browserExtensionEnabled"] = false
+            legacy["settings"] = settings
+            let data = try JSONSerialization.data(withJSONObject: legacy, options: [.sortedKeys])
+            let legacyURL = root.appendingPathComponent("legacy-library.json")
+            try data.write(to: legacyURL, options: .atomic)
+
+            let loaded = LibraryStore(persistenceURL: legacyURL)
+            try expect(loaded.settings == expected.settings && loaded.papers == expected.papers,
+                       "Retired settings changed the decoded library or active preferences")
+            try expect(try Data(contentsOf: legacyURL) == data, "Loading a legacy library rewrote its source")
+            try expect(loaded.updateSetting(\.appearance, value: .dark), "A decoded legacy library could not be saved")
+            let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: legacyURL)) as! [String: Any]
+            let savedSettings = saved["settings"] as! [String: Any]
+            try expect(["freePaperLimit", "proUnlocked", "browserExtensionEnabled"].allSatisfy { savedSettings[$0] == nil },
+                       "A new save still emits retired settings")
+            let reloaded = LibraryStore(persistenceURL: legacyURL)
+            try expect(reloaded.settings.appearance == .dark && reloaded.papers == expected.papers,
+                       "Saving legacy settings lost a durable edit or paper records")
+        }
+
         let server = LocalAPIServer()
         server.reconfigure(with: store)
         defer { server.stop() }
@@ -119,12 +151,16 @@ struct LocalAPITests {
             let write = try await request(port: port, method: "POST", path: "/connector/papers", body: Data(#"{"title":"Read only write"}"#.utf8))
             let upload = try await request(port: port, method: "PUT", path: "/connector/papers/\(id)/pdf?force=true", headers: ["Content-Type": "application/pdf"], body: pdf)
             try expect(read.status == 200 && write.status == 403 && upload.status == 403 && store.papers.count == 1, "Read-only guard failed")
+            let readOnlyStatus = try jsonObject(await request(port: port, path: "/connector/status"))
+            try expect(readOnlyStatus["browserExtensionEnabled"] as? Bool == true && readOnlyStatus["readOnly"] as? Bool == true,
+                       "Connector availability or read-only status is incorrect")
             store.updateSetting(\.localAPIReadOnly, value: false)
-            store.updateSetting(\.browserExtensionEnabled, value: false)
             let status = try await request(port: port, path: "/connector/status")
-            let blocked = try await request(port: port, path: "/connector/collections")
-            try expect(status.status == 200 && blocked.status == 200, "Legacy extension toggle incorrectly overrides the enabled Local API")
-            store.updateSetting(\.browserExtensionEnabled, value: true)
+            let collections = try await request(port: port, path: "/connector/collections")
+            let capabilities = try jsonObject(status)
+            try expect(status.status == 200 && collections.status == 200 &&
+                       capabilities["browserExtensionEnabled"] as? Bool == true && capabilities["readOnly"] as? Bool == false,
+                       "Connector availability does not follow the enabled Local API")
         }
         await run("PDF uploads reject bad MIME, invalid PDF and unforced replacement") {
             let path = "/connector/papers/\(id)/pdf"

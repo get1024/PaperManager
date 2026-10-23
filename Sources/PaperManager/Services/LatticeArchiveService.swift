@@ -28,6 +28,20 @@ struct LatticeArchiveResult {
 /// Reads the observed Lattice 3.0 schema-2 backup. PDF bytes stay in the ZIP;
 /// accessible source references are explicitly marked read-only in our own library.
 enum LatticeArchiveService {
+    private struct ArchivedAttachment {
+        var paperID: UUID
+        var id: UUID
+        var filename: String
+        var addedAt: Date
+        var member: String?
+        var outputName: String {
+            let ext = URL(fileURLWithPath: filename).pathExtension
+            let suffix = !ext.isEmpty && ext.count <= 16 && ext.unicodeScalars.allSatisfy(CharacterSet.alphanumerics.contains)
+                ? "." + ext.lowercased() : ""
+            return "attachment-\(paperID.uuidString)-\(id.uuidString)\(suffix)"
+        }
+    }
+
     static func readArchive(at url: URL, fallbackSnapshot: LibrarySnapshot? = nil,
                             materializePDFsTo directory: URL? = nil) throws -> LatticeArchiveResult {
         let archive = try LatticeZIPInventory(url: url)
@@ -55,6 +69,13 @@ enum LatticeArchiveService {
         try uniqueIDs(collections, entity: "collections")
         try uniqueIDs(tags, entity: "tags")
         try uniqueIDs(templates, entity: "templates")
+        let archivedAttachments = try attachmentDTOs(in: papers)
+        let attachmentFiles = archivedAttachments.compactMap(\.member)
+        guard Set(attachmentFiles).count == attachmentFiles.count,
+              try integer(counts, "attachmentFiles", required: true) == attachmentFiles.count else {
+            throw failure("备份附件载荷重复，或数量与 manifest 不一致。")
+        }
+        for member in attachmentFiles { try archive.requirePayload(member) }
         var snapshot = LibrarySnapshot.empty
         snapshot.settings = fallbackSnapshot?.settings ?? .defaults
         let referencePapers = Dictionary((fallbackSnapshot?.papers ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -137,7 +158,7 @@ enum LatticeArchiveService {
                     paper.attachments = [Attachment(kind: .pdf, filePath: originalPath,
                         displayName: try string(value, "pdfFilename"), isReadOnlyReference: true)]
                 } else if let reference = referencePapers[paper.id] {
-                    paper.attachments = reference.attachments.map { attachment in
+                    paper.attachments = reference.attachments.filter { $0.id == reference.primaryPDF?.id }.map { attachment in
                         var protected = attachment
                         protected.isReadOnlyReference = true
                         let directPathExists = FileManager.default.fileExists(atPath: attachment.filePath)
@@ -151,6 +172,17 @@ enum LatticeArchiveService {
                     }
                 }
                 if paper.primaryPDF?.missing == false { referenceCount += 1 }
+            }
+            for item in archivedAttachments where item.paperID == paper.id {
+                var attachment = referencePapers[paper.id]?.attachments.first(where: { $0.id == item.id })
+                    ?? Attachment(id: item.id, kind: .file,
+                                  filePath: url.appendingPathComponent("unmaterialized-attachments/\(item.id.uuidString)").path,
+                                  displayName: item.filename, missing: true, isReadOnlyReference: true, addedAt: item.addedAt)
+                attachment.id = item.id; attachment.kind = .file
+                attachment.displayName = item.filename; attachment.addedAt = item.addedAt
+                attachment.isReadOnlyReference = true
+                attachment.missing = (try? attachment.withResolvedURL { !FileManager.default.fileExists(atPath: $0.path) }) ?? true
+                paper.attachments.append(attachment)
             }
             return paper
         }
@@ -193,7 +225,9 @@ enum LatticeArchiveService {
         let attachmentCount = try integer(counts, "attachmentFiles", required: true)!
         var warnings: [String] = []
         if referenceCount < archivePDFCount { warnings.append("归档包含 \(archivePDFCount) 个 PDF；仅恢复 \(referenceCount) 个可用外部引用。未解压 PDF，剩余文件仍保留在原归档中。") }
-        if attachmentCount > 0 { warnings.append("此归档的次要附件布局尚未验证，原 payload 已完整保留，未解压附件。") }
+        if attachmentCount > 0 { warnings.append("归档附件包含 \(attachmentCount) 个文件；未解压的文件仍保留在原归档中。") }
+        let unavailableAttachments = archivedAttachments.filter { $0.member == nil }.count
+        if unavailableAttachments > 0 { warnings.append("\(unavailableAttachments) 个附件仅含元数据，归档未携带其文件；已保留身份、名称及可用的原引用。") }
         if let template = defaults.first {
             let body = try string(template, "content", required: true)
             let pattern = try NSRegularExpression(pattern: #"\{\{[#/]?([A-Za-z0-9_]+)\}\}"#)
@@ -242,7 +276,13 @@ enum LatticeArchiveService {
             let payload = try object(raw)
             let records = try records(payload, "papers")
             let included = try records.filter { try boolean($0, "hasPDF", required: true) }
-            try archive.copyMembers(included.map { "pdfs/\(try identifier($0, "id").uuidString).pdf" }, toNewDirectory: directory)
+            let secondary = try attachmentDTOs(in: records).filter { $0.member != nil }
+            let primaryMembers = try included.map { "pdfs/\(try identifier($0, "id").uuidString).pdf" }
+            let names = primaryMembers + secondary.compactMap(\.member)
+            let outputNames = Dictionary(uniqueKeysWithValues: secondary.map { ($0.member!, $0.outputName) })
+            try archive.copyMembers(names, toNewDirectory: directory, outputNames: outputNames)
+            var completed = false
+            defer { if !completed { try? FileManager.default.removeItem(at: directory) } }
             for record in included {
                 let id = try identifier(record, "id")
                 guard let index = result.snapshot.papers.firstIndex(where: { $0.id == id }) else { throw failure("归档文献 ID 无法匹配。") }
@@ -252,9 +292,46 @@ enum LatticeArchiveService {
                     displayName: try string(record, "pdfFilename"), fileSize: Int64(archive.entries["pdfs/\(id.uuidString).pdf"]!.size),
                     addedAt: Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970))), at: 0)
             }
+            for item in secondary {
+                guard let index = result.snapshot.papers.firstIndex(where: { $0.id == item.paperID }),
+                      let attachmentIndex = result.snapshot.papers[index].attachments.firstIndex(where: { $0.id == item.id }) else {
+                    throw failure("归档附件 ID 无法匹配。")
+                }
+                let member = item.member!
+                result.snapshot.papers[index].attachments[attachmentIndex] = Attachment(
+                    id: item.id, kind: .file, filePath: directory.appendingPathComponent(item.outputName).path,
+                    displayName: item.filename, fileSize: Int64(archive.entries[member]!.size), addedAt: item.addedAt)
+            }
             result.sourceReferenceCount = 0
-            result.warnings.removeAll { $0.hasPrefix("归档包含") }
+            result.warnings.removeAll { $0.hasPrefix("归档包含") || $0.hasPrefix("归档附件包含") }
+            completed = true
             return result
+    }
+
+    /// Field layout observed in the shipped arm64 AttachmentDTO descriptor.
+    /// The member is explicit data, never a guessed writer naming convention.
+    private static func attachmentDTOs(in papers: [[String: Any]]) throws -> [ArchivedAttachment] {
+        var result: [ArchivedAttachment] = [], ids: Set<UUID> = []
+        for paper in papers {
+            guard let value = paper["attachments"], !(value is NSNull) else { continue }
+            guard let attachments = value as? [[String: Any]] else { throw failure("备份 attachments 必须是对象数组。") }
+            let paperID = try identifier(paper, "id")
+            for item in attachments {
+                let id = try identifier(item, "id")
+                guard ids.insert(id).inserted else { throw failure("备份附件存在重复 UUID。") }
+                let filename = try string(item, "filename", required: true)
+                guard !filename.trimmed.isEmpty, !filename.contains("/"), !filename.contains("\\"), !filename.contains("\0"),
+                      filename != ".", filename != ".." else { throw failure("备份附件名称无效。") }
+                let member = try optionalString(item, "archivedRelativePath")
+                if let member {
+                    guard LatticeZIPInventory.safePayloadPath(member), member != "manifest.json", member != "data.json",
+                          !member.hasPrefix("pdfs/") else { throw failure("备份附件 archivedRelativePath 不是安全的独立载荷路径。") }
+                }
+                result.append(ArchivedAttachment(paperID: paperID, id: id, filename: filename,
+                                                 addedAt: try date(string(item, "dateAdded", required: true)), member: member))
+            }
+        }
+        return result
     }
 
     @MainActor
@@ -396,7 +473,7 @@ enum LatticeArchiveService {
 /// Classic single-volume ZIP inventory. ZIP64/encryption are rejected rather
 /// than guessed; only the two bounded JSON members are inflated by system unzip.
 private struct LatticeZIPInventory {
-    struct Entry { let name: String; let flags: UInt16; let method: UInt16; let crc: UInt32; let compressed: UInt32; let size: UInt32; let offset: UInt32 }
+    struct Entry { let name: String; let flags: UInt16; let method: UInt16; let crc: UInt32; let compressed: UInt32; let size: UInt32; let offset: UInt32; let unixMode: UInt32 }
     let url: URL
     let entries: [String: Entry]
     let fileSize: UInt64
@@ -440,7 +517,8 @@ private struct LatticeZIPInventory {
                   let name = String(bytes: bytes[(position + 46)..<(position + 46 + nameLength)], encoding: .utf8),
                   Self.safePath(name), found[name] == nil else { throw PaperManagerError.message("ZIP 存在重复成员或不安全的载荷路径。") }
             let entry = Entry(name: name, flags: Self.u16(bytes, position + 8), method: Self.u16(bytes, position + 10),
-                crc: Self.u32(bytes, position + 16), compressed: Self.u32(bytes, position + 20), size: Self.u32(bytes, position + 24), offset: Self.u32(bytes, position + 42))
+                crc: Self.u32(bytes, position + 16), compressed: Self.u32(bytes, position + 20), size: Self.u32(bytes, position + 24), offset: Self.u32(bytes, position + 42),
+                unixMode: Self.u16(bytes, position + 4) >> 8 == 3 ? Self.u32(bytes, position + 38) >> 16 : 0)
             guard entry.flags & 1 == 0, entry.compressed != UInt32.max, entry.size != UInt32.max,
                   UInt64(entry.offset) + 30 < directoryOffset else { throw PaperManagerError.message("加密或 ZIP64 载荷暂不支持。") }
             found[name] = entry
@@ -499,7 +577,15 @@ private struct LatticeZIPInventory {
         return data
     }
 
-    func copyMembers(_ names: [String], toNewDirectory directory: URL) throws {
+    func requirePayload(_ name: String) throws {
+        guard Self.safePayloadPath(name), let entry = entries[name], entry.size <= 512 * 1_048_576,
+              entry.method == 0 || entry.method == 8,
+              entry.unixMode & UInt32(S_IFMT) == 0 || entry.unixMode & UInt32(S_IFMT) == UInt32(S_IFREG) else {
+            throw PaperManagerError.message("归档缺少附件，或载荷路径、类型、压缩方式、大小不受支持。")
+        }
+    }
+
+    func copyMembers(_ names: [String], toNewDirectory directory: URL, outputNames: [String: String] = [:]) throws {
         // Keep the caller's canonical physical path: macOS URL standardization
         // may abbreviate /private/var back to its /var symlink.
         let destination = directory
@@ -517,14 +603,13 @@ private struct LatticeZIPInventory {
             }
         }
         let selected = try names.map { name -> Entry in
-            guard let entry = entries[name], entry.size <= 512 * 1_048_576, entry.method == 0 || entry.method == 8,
-                  name == "pdfs/\(URL(fileURLWithPath: name).deletingPathExtension().lastPathComponent).pdf",
-                  UUID(uuidString: URL(fileURLWithPath: name).deletingPathExtension().lastPathComponent) != nil else {
-                throw PaperManagerError.message("PDF 载荷路径、压缩方式或大小超出已验证范围。")
-            }
-            return entry
+            try requirePayload(name)
+            return entries[name]!
         }
-        guard Set(names).count == names.count, selected.reduce(UInt64(0), { $0 + UInt64($1.size) }) <= 20 * 1_073_741_824 else {
+        let filenames = names.map { outputNames[$0] ?? URL(fileURLWithPath: $0).lastPathComponent }
+        guard filenames.allSatisfy({ Self.safePayloadPath($0) && !$0.contains("/") }),
+              Set(filenames.map { $0.lowercased() }).count == filenames.count,
+              Set(names).count == names.count, selected.reduce(UInt64(0), { $0 + UInt64($1.size) }) <= 20 * 1_073_741_824 else {
             throw PaperManagerError.message("PDF 载荷重复或总大小超过 20 GiB。")
         }
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -534,7 +619,7 @@ private struct LatticeZIPInventory {
         var created: [String] = []
         do {
             for entry in selected {
-                let filename = URL(fileURLWithPath: entry.name).lastPathComponent
+                let filename = outputNames[entry.name] ?? URL(fileURLWithPath: entry.name).lastPathComponent
                 let descriptor = openat(directoryFD, filename, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR)
                 guard descriptor >= 0 else { throw PaperManagerError.message("无法创建 PDF；不会覆盖现有文件或符号链接。") }
                 created.append(filename)
@@ -598,6 +683,9 @@ private struct LatticeZIPInventory {
         return components.enumerated().allSatisfy { index, component in
             component != "." && component != ".." && (!component.isEmpty || index == components.count - 1)
         }
+    }
+    static func safePayloadPath(_ name: String) -> Bool {
+        safePath(name) && !name.hasSuffix("/") && name.rangeOfCharacter(from: CharacterSet(charactersIn: "*?[]").union(.controlCharacters)) == nil
     }
     private static func u16(_ data: [UInt8], _ offset: Int) -> UInt16 { UInt16(data[offset]) | UInt16(data[offset + 1]) << 8 }
     private static func u32(_ data: [UInt8], _ offset: Int) -> UInt32 { UInt32(u16(data, offset)) | UInt32(u16(data, offset + 2)) << 16 }

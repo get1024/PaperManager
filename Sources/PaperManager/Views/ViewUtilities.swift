@@ -7,10 +7,6 @@ enum PMTypography {
         .system(size: size, weight: weight)
     }
 
-    static func timesFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .custom("Times New Roman", size: size).weight(weight)
-    }
-
     static let largeTitle = font(size: 22, weight: .bold)
     static let title = font(size: 16, weight: .bold)
     static let headline = font(size: 14, weight: .bold)
@@ -22,8 +18,8 @@ enum PMTypography {
     static let sidebarRow = font(size: 14, weight: .semibold)
     static let sidebarCount = font(size: 13, weight: .semibold)
     static let sectionHeader = font(size: 12, weight: .bold)
-    static let detailTitle = timesFont(size: 16.5, weight: .bold)
-    static let detailAbstract = timesFont(size: 13.25)
+    static let detailTitle = Font.system(size: 16.5, weight: .bold, design: .serif)
+    static let detailAbstract = Font.system(size: 12, design: .serif)
     static let paperTitle = font(size: 16, weight: .bold)
     static let paperBody = font(size: 13, weight: .semibold)
     static let paperBodyRegular = font(size: 13)
@@ -90,6 +86,73 @@ enum DialogService {
         panel.nameFieldStringValue = name
         panel.allowedContentTypes = types
         return panel.runModal() == .OK ? panel.url : nil
+    }
+}
+
+@MainActor
+enum PaperReaderActions {
+    static func openPDF(_ paper: Paper, attachment suppliedAttachment: Attachment? = nil, store: LibraryStore) {
+        guard let attachment = suppliedAttachment ?? paper.primaryPDF else {
+            store.statusMessage = PMLocalization.text("这篇文献尚未关联 PDF。")
+            return
+        }
+        let token = store.libraryIdentityToken
+        do {
+            try attachment.withResolvedURL { url in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PaperManagerError.message(PMLocalization.text("PDF 文件不存在，可能已在 Finder 中移动或删除。"))
+                }
+                if let path = store.settings.defaultPDFReaderPath.nilIfBlank {
+                    NSWorkspace.shared.open([url], withApplicationAt: URL(fileURLWithPath: path), configuration: .init()) { _, error in
+                        Task { @MainActor in
+                            guard store.libraryIdentityToken == token else { return }
+                            if let error {
+                                store.statusMessage = PMLocalization.format("无法使用所选阅读器打开 PDF：%@", error.localizedDescription)
+                            } else { didOpen(paper.id, attachment: attachment, store: store) }
+                        }
+                    }
+                } else if NSWorkspace.shared.open(url) {
+                    didOpen(paper.id, attachment: attachment, store: store)
+                } else {
+                    throw PaperManagerError.message(PMLocalization.text("无法打开 PDF。"))
+                }
+            }
+        } catch {
+            store.statusMessage = PMLocalization.format("无法打开 PDF：%@", error.localizedDescription)
+        }
+    }
+
+    private static func didOpen(_ id: UUID, attachment: Attachment, store: LibraryStore) {
+        guard let paper = store.paper(with: id), paper.attachments.contains(attachment) else { return }
+        store.markOpened(id)
+        guard paper.primaryPDF == attachment, store.settings.autoExtractAnnotationsAfterOpeningPDF else { return }
+        Task { await refreshAnnotationsAfterOpening(id, attachment: attachment, store: store) }
+    }
+
+    @discardableResult
+    static func refreshAnnotationsAfterOpening(
+        _ id: UUID, attachment: Attachment, store: LibraryStore,
+        extractor: (Attachment, UUID) async throws -> [ResearchAnnotation] = {
+            try await ImportService.extractAnnotations(from: $0, paperID: $1)
+        }
+    ) async -> Bool {
+        guard let paper = store.paper(with: id), paper.primaryPDF == attachment else { return false }
+        let token = store.libraryIdentityToken
+        let baseline = paper.annotations
+        do {
+            let annotations = try await extractor(attachment, id)
+            guard store.libraryIdentityToken == token,
+                  var latest = store.paper(with: id), latest.primaryPDF == attachment,
+                  latest.annotations == baseline else { return false }
+            latest.annotations = annotations
+            try store.updatePaperDurably(latest)
+            store.statusMessage = PMLocalization.text("标注已刷新。")
+            return true
+        } catch {
+            guard store.libraryIdentityToken == token else { return false }
+            store.statusMessage = PMLocalization.format("标注提取失败：%@", error.localizedDescription)
+            return false
+        }
     }
 }
 

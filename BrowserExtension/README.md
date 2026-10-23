@@ -18,6 +18,6 @@ For local signed Safari app distribution, use a Safari Web Extension app project
 
 ## Executed checks
 
-`Sources/PaperManagerCLI/Tests/run.sh` builds a native Swift fixture running the actual reconstructed LocalAPIServer on a system-assigned loopback port. Node exercises this connector's core against that real server. Metadata extraction uses local document fixtures, not external browsing. Tests cover Unicode limits, exact identities, duplicate handling, primary-PDF conflicts, protected source-file preservation, metadata-only fallback, read-only policy and legacy conflicts, alongside the CLI/MCP tests.
+`Tests/Connector/run.sh` builds a native Swift fixture running the actual reconstructed LocalAPIServer on a system-assigned loopback port. Node exercises this connector's core against that real server. Metadata extraction uses local document fixtures, not external browsing. Tests cover Unicode limits, exact identities, duplicate handling, primary-PDF conflicts, protected source-file preservation, metadata-only fallback, read-only policy and legacy conflicts, alongside the CLI/MCP tests.
 
 The Chrome/Edge/Safari popup's permission prompt, scripting injection, native browser UI, and packaged signing remain browser acceptance checks. Unit and TCP tests establish helper and server behavior only.

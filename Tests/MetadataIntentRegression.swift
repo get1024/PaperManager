@@ -14,6 +14,7 @@ struct MetadataIntentRegression {
         await run("Template entities reflect the current editable metadata template", testTemplateQuery)
         await run("Template queries and explicit selection support multiple persisted templates", testMultipleTemplates)
         await run("Export output modes preserve annotations and isolate clipboard writes", testOutputModes)
+        await run("Shortcut image annotations use portable text placeholders in both output modes", testImagePlaceholders)
         await run("The actual intent returns template-rendered text", testIntentPerform)
         await run("Missing entities and unreadable libraries fail without changing files", testInvalidInputs)
         for failure in failures { print("FAIL: \(failure)") }
@@ -109,6 +110,30 @@ struct MetadataIntentRegression {
             intent.output = .returnText
             let result = try await intent.perform()
             try expect(result.value == "Intent fixture|Important phrase", "Intent perform did not return the selected paper/template output")
+        }
+    }
+
+    private static func testImagePlaceholders() async throws {
+        try await fixture { _, store, paper in
+            var snapshot = store.snapshot
+            snapshot.settings.languageIdentifier = "en"
+            snapshot.settings.annotationTemplate = "{{selectedText}}{{#image}}![region]({{image}}){{/image}}"
+            var image = ResearchAnnotation(page: 4, kind: .square, selectedText: "Keep this note")
+            image.imageFilePath = "/private/synthetic-annotation/never-export-this.png"
+            snapshot.papers[0].annotations = [image]
+            for mode in [MetadataOutputMode.returnText, .copyToClipboard] {
+                var clipboard: [String] = []
+                let output = try MetadataIntentLibrary.export(paperID: paper.id.uuidString, templateID: nil, includeAnnotations: true,
+                                                              output: mode, snapshot: snapshot, copyToClipboard: { clipboard.append($0) })
+                try expect(output.contains("Keep this note") && output.contains("[Image annotation, page 4]"), "Image lost its textual placeholder or annotation text")
+                try expect(!output.contains("/private/") && !output.contains("![") && !output.contains("papermanager-annotation-image:"), "A file path, Markdown image wrapper, or internal token escaped")
+                try expect(clipboard == (mode == .copyToClipboard ? [output] : []), "Placeholder mode changed clipboard semantics")
+            }
+            snapshot.settings.annotationTemplate = "{{image}}"
+            snapshot.settings.languageIdentifier = "zh-Hans"
+            let chinese = try MetadataIntentLibrary.export(paperID: paper.id.uuidString, templateID: nil, includeAnnotations: true,
+                                                           output: .returnText, snapshot: snapshot, copyToClipboard: { _ in })
+            try expect(chinese.contains("[图片标注，第 4 页]"), "Bare image variables or Chinese output are not supported")
         }
     }
 

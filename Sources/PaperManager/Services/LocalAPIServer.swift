@@ -3,6 +3,39 @@ import Foundation
 import Network
 import PDFKit
 
+/// Cancelling an API request removes a queued waiter without consuming a
+/// provider slot. Active providers retain their slot until they actually finish.
+private actor APIEnrichmentLimiter {
+    private var active = 0
+    private var waiters: [(UUID, CheckedContinuation<Void, Error>)] = []
+
+    func run<Value>(_ operation: () async throws -> Value) async throws -> Value {
+        try await acquire()
+        defer { release() }
+        try Task.checkCancellation()
+        return try await operation()
+    }
+    private func acquire() async throws {
+        try Task.checkCancellation()
+        if active < 3 { active += 1; return }
+        let id = UUID()
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled { continuation.resume(throwing: CancellationError()) }
+                else { waiters.append((id, continuation)) }
+            }
+        }, onCancel: { Task { await self.cancel(id) } })
+    }
+    private func cancel(_ id: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.0 == id }) else { return }
+        waiters.remove(at: index).1.resume(throwing: CancellationError())
+    }
+    private func release() {
+        if waiters.isEmpty { active -= 1 }
+        else { waiters.removeFirst().1.resume() }
+    }
+}
+
 @MainActor
 final class LocalAPIServer: ObservableObject {
     @Published private(set) var isRunning = false
@@ -10,19 +43,30 @@ final class LocalAPIServer: ObservableObject {
 
     private var listener: NWListener?
     private var activePort: Int?
+    private var listenerGeneration: UUID?
+    private weak var boundStore: LibraryStore?
+    private var connections: [UUID: NWConnection] = [:]
     private var enrichmentTasks: [UUID: Task<Void, Never>] = [:]
     private var enrichmentGenerations: [UUID: UUID] = [:]
+    private let metadataLookup: (Paper) async throws -> PaperMetadata
+    private let enrichmentLimiter = APIEnrichmentLimiter()
     private let queue = DispatchQueue(label: "PaperManager.LocalAPI")
+
+    init(metadataLookup: @escaping (Paper) async throws -> PaperMetadata = { paper in
+        try await MetadataLookupClient.lookup(doi: paper.doi.nilIfBlank, arxivID: paper.arxivLookupID,
+                                              isbn: paper.isbn.nilIfBlank, title: paper.title.nilIfBlank)
+    }) { self.metadataLookup = metadataLookup }
 
     func reconfigure(with store: LibraryStore) {
         let settings = store.settings
         guard settings.localAPIEnabled else {
             stop()
-            statusText = "Disabled"
+            if statusText != "Disabled" { statusText = "Disabled" }
             return
         }
-        if isRunning, activePort == settings.localAPIPort {
-            statusText = "Listening on 127.0.0.1:\(settings.localAPIPort)"
+        // Multiple library windows and unrelated settings changes can arrive
+        // before the listener reports ready. Reuse that pending listener too.
+        if listener != nil, activePort == settings.localAPIPort, boundStore === store {
             return
         }
         stop()
@@ -30,13 +74,24 @@ final class LocalAPIServer: ObservableObject {
     }
 
     func stop() {
+        // Invalidate before cancelling: Network delivers state changes later.
+        // An old listener must not change a replacement listener's state.
+        listenerGeneration = nil
+        boundStore = nil
         enrichmentTasks.values.forEach { $0.cancel() }
         enrichmentTasks.removeAll()
         enrichmentGenerations.removeAll()
         listener?.cancel()
         listener = nil
         activePort = nil
-        isRunning = false
+        connections.values.forEach { $0.cancel() }
+        connections.removeAll()
+        if isRunning { isRunning = false }
+    }
+
+    func waitForEnrichment() async {
+        let tasks = Array(enrichmentTasks.values)
+        for task in tasks { await task.value }
     }
 
     private func start(port: Int, store: LibraryStore) {
@@ -51,50 +106,70 @@ final class LocalAPIServer: ObservableObject {
             // The required endpoint already supplies the address and port.
             // Passing a second port to NWListener conflicts with it (EINVAL).
             let listener = try NWListener(using: parameters)
+            let generation = UUID()
             listener.newConnectionHandler = { [weak self, weak store] connection in
-                guard let self, let store else { return }
-                self.handle(connection: connection, store: store)
+                Task { @MainActor in
+                    guard let self, let store, self.listenerGeneration == generation else {
+                        connection.cancel()
+                        return
+                    }
+                    self.handle(connection: connection, store: store, generation: generation)
+                }
             }
             listener.stateUpdateHandler = { [weak self] state in
                 Task { @MainActor in
+                    guard let self, self.listenerGeneration == generation else { return }
                     switch state {
                     case .ready:
-                        self?.isRunning = true
-                        self?.activePort = port
-                        self?.statusText = "Listening on 127.0.0.1:\(port)"
+                        self.isRunning = true
+                        self.statusText = "Listening on 127.0.0.1:\(port)"
                     case .failed(let error):
-                        self?.isRunning = false
-                        self?.statusText = "Failed: \(error.localizedDescription)"
+                        self.stop()
+                        self.statusText = "Failed: \(error.localizedDescription)"
                     case .cancelled:
-                        self?.isRunning = false
+                        self.stop()
                     default:
                         break
                     }
                 }
             }
-            listener.start(queue: queue)
             self.listener = listener
+            listenerGeneration = generation
+            activePort = port
+            boundStore = store
             statusText = "Starting..."
+            listener.start(queue: queue)
         } catch {
             statusText = "Failed: \(error.localizedDescription)"
         }
     }
 
-    private nonisolated func handle(connection: NWConnection, store: LibraryStore) {
+    private func handle(connection: NWConnection, store: LibraryStore, generation: UUID) {
+        let id = UUID()
+        connections[id] = connection
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .failed, .cancelled:
+                Task { @MainActor in self?.connections.removeValue(forKey: id) }
+            default: break
+            }
+        }
         connection.start(queue: queue)
-        receive(connection: connection, store: store, buffer: Data())
+        receive(connection: connection, store: store, generation: generation, buffer: Data())
     }
 
-    private nonisolated func receive(connection: NWConnection, store: LibraryStore, buffer: Data) {
+    private nonisolated func receive(connection: NWConnection, store: LibraryStore, generation: UUID, buffer: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
+            guard let self else { connection.cancel(); return }
             var nextBuffer = buffer
             if let data { nextBuffer.append(data) }
 
             switch HTTPRequest.parse(data: nextBuffer) {
             case .request(let request):
                 Task { @MainActor in
+                    guard self.listenerGeneration == generation else { connection.cancel(); return }
                     let response = await self.respond(to: request, store: store)
+                    guard self.listenerGeneration == generation else { connection.cancel(); return }
                     self.send(response, on: connection)
                 }
                 return
@@ -104,7 +179,7 @@ final class LocalAPIServer: ObservableObject {
                 if isComplete || error != nil {
                     self.send(.plain(status: 400, text: "Bad Request"), on: connection)
                 } else {
-                    self.receive(connection: connection, store: store, buffer: nextBuffer)
+                    self.receive(connection: connection, store: store, generation: generation, buffer: nextBuffer)
                 }
             }
         }
@@ -215,7 +290,7 @@ final class LocalAPIServer: ObservableObject {
             "ok": true,
             "apiVersion": "1",
             "serverVersion": "PaperManager 1.0",
-            "appVersion": "PaperManager 1.0",
+            "appVersion": "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"))",
             "readOnly": store.settings.localAPIReadOnly,
             "browserExtensionEnabled": true,
             "fileLibrary": ["state": fileLibrary.availability.rawValue, "available": fileLibrary.isAvailable,
@@ -235,7 +310,7 @@ final class LocalAPIServer: ObservableObject {
         } else { limit = 10 }
         let terms = (request.query["q"] ?? "").folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        let matches = store.papers.filter { paper in
+        let matches = store.snapshot.papers.filter { paper in
             let text = [paper.title, paper.authors.joined(separator: " "), paper.sourceDisplay, paper.citekey, paper.year.map(String.init) ?? ""]
                 .joined(separator: " ").folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             return terms.allSatisfy { text.contains($0) }
@@ -293,18 +368,26 @@ final class LocalAPIServer: ObservableObject {
                     warnings.append("Collection not found: \(collectionName)")
                 }
             }
+            var additionalTags: [PaperTag] = []
             for tagName in payload.tags ?? [] {
-                if let id = tagID(named: tagName, store: store), !paper.tagIDs.contains(id) {
-                    paper.tagIDs.append(id)
+                let clean = tagName.trimmed
+                guard !clean.isEmpty else { continue }
+                let tag: PaperTag
+                if let existing = (store.tags + additionalTags).first(where: { $0.name == clean }) { tag = existing }
+                else {
+                    let sortIndex = ((store.tags + additionalTags).map(\.sortIndex).max() ?? -1) + 1
+                    tag = PaperTag(name: clean, colorHex: "#5B8DEF", sortIndex: sortIndex)
+                    additionalTags.append(tag)
                 }
+                if !paper.tagIDs.contains(tag.id) { paper.tagIDs.append(tag.id) }
             }
             let id: UUID
             do {
                 if let duplicateID {
-                    try store.updatePaperDurably(paper)
+                    try store.updatePaperDurably(paper, additionalTags: additionalTags)
                     id = duplicateID
                 } else {
-                    id = try store.addPaperDurably(paper)
+                    id = try store.addPaperDurably(paper, additionalTags: additionalTags)
                 }
             } catch {
                 return .json(status: 500, object: ["error": error.localizedDescription])
@@ -333,6 +416,10 @@ final class LocalAPIServer: ObservableObject {
         enrichmentTasks[paper.id]?.cancel()
         let generation = UUID()
         enrichmentGenerations[paper.id] = generation
+        let libraryIdentity = store.libraryIdentityToken
+        let sourceIdentity = LibraryStore.metadataRefreshIdentity(paper)
+        let lookup = metadataLookup
+        let limiter = enrichmentLimiter
         enrichmentTasks[paper.id] = Task { [weak self, weak store] in
             defer {
                 if self?.enrichmentGenerations[paper.id] == generation {
@@ -340,8 +427,11 @@ final class LocalAPIServer: ObservableObject {
                     self?.enrichmentGenerations.removeValue(forKey: paper.id)
                 }
             }
-            guard let metadata = try? await MetadataLookupClient.lookup(doi: paper.doi.nilIfBlank, arxivID: paper.arxivLookupID, isbn: paper.isbn.nilIfBlank, title: paper.title.nilIfBlank),
-                  !Task.isCancelled, let store, let latest = store.paper(with: paper.id) else { return }
+            guard let metadata = try? await limiter.run({ try await lookup(paper) }), !Task.isCancelled,
+                  self?.enrichmentGenerations[paper.id] == generation,
+                  let store, store.libraryIdentityToken == libraryIdentity,
+                  let latest = store.paper(with: paper.id),
+                  LibraryStore.metadataRefreshIdentity(latest) == sourceIdentity else { return }
             // A delayed provider result may fill gaps, never erase intervening
             // local edits, memberships, attachments, ratings or annotations.
             do { try store.updatePaperDurably(metadata.merged(into: latest)) }
@@ -405,15 +495,6 @@ final class LocalAPIServer: ObservableObject {
             }
         }
         return currentID
-    }
-
-    private func tagID(named name: String, store: LibraryStore) -> UUID? {
-        let clean = name.trimmed
-        guard !clean.isEmpty else { return nil }
-        if let existing = store.tags.first(where: { $0.name == clean }) {
-            return existing.id
-        }
-        return store.addTag(name: clean)
     }
 
     private func collectionsPayload(store: LibraryStore) -> [[String: Any]] {

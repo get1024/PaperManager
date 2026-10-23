@@ -172,8 +172,27 @@ enum MetadataIntentLibrary {
             }
             selectedTemplateID = parsed
         }
-        let text = TemplateRenderer.renderMetadata(paper: paper, snapshot: snapshot,
-                                                   includeAnnotations: includeAnnotations, templateID: selectedTemplateID)
+        var imagePlaceholders: [String: String] = [:]
+        let chinese = PMLocalization.resolvedLanguage(snapshot.settings.languageIdentifier) == "zh-Hans"
+        var text = TemplateRenderer.renderMetadata(
+            paper: paper, snapshot: snapshot, includeAnnotations: includeAnnotations,
+            annotationImagePath: { annotation in
+                guard annotation.imageFilePath?.nilIfBlank != nil || annotation.kind == .square || annotation.kind == .circle else { return "" }
+                let token = "papermanager-annotation-image:\(annotation.id.uuidString)"
+                imagePlaceholders[token] = chinese ? "[图片标注，第 \(annotation.page) 页]" : "[Image annotation, page \(annotation.page)]"
+                return token
+            }, templateID: selectedTemplateID)
+        for (token, placeholder) in imagePlaceholders {
+            // Templates commonly wrap {{image}} in Markdown image syntax.
+            // Shortcuts returns plain text, so remove that wrapper as well as
+            // substituting bare variables; no private file path is exposed.
+            let pattern = "!\\[[^\\]]*\\]\\(\\s*" + NSRegularExpression.escapedPattern(for: token) + "\\s*\\)"
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                text = regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                                       withTemplate: NSRegularExpression.escapedTemplate(for: placeholder))
+            }
+            text = text.replacingOccurrences(of: token, with: placeholder)
+        }
         if output == .copyToClipboard { copyToClipboard(text) }
         return text
     }

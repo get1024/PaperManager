@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 @main
@@ -6,7 +7,9 @@ struct LatticeArchiveTests {
     static func main() {
         let directory = URL(fileURLWithPath: CommandLine.arguments[1])
         var failures = 0
+        var checks = 0
         func check(_ name: String, _ body: () throws -> Void) {
+            checks += 1
             do { try body(); print("PASS \(name)") }
             catch { failures += 1; print("FAIL \(name): \(error.localizedDescription)") }
         }
@@ -65,6 +68,55 @@ struct LatticeArchiveTests {
             do { _ = try LatticeArchiveService.readArchive(at: archive, materializePDFsTo: link.appendingPathComponent("child")) } catch { rejectedLink = true }
             try require(rejectedExisting && rejectedLink && !FileManager.default.fileExists(atPath: copied.appendingPathComponent("child").path))
         }
+        check("explicit secondary members retain identities, dates, annotation metadata and exact bytes through restore") {
+            let source = directory.appendingPathComponent("with-attachments.lattice"), before = try Data(contentsOf: source)
+            let output = directory.resolvingSymlinksInPath().appendingPathComponent("copied-secondary")
+            let metadata = try LatticeArchiveService.readArchive(at: source)
+            try require(metadata.attachmentFileCount == 2 && metadata.snapshot.papers[0].attachments.count == 2)
+            try require(metadata.snapshot.papers[0].attachments.allSatisfy { $0.missing && $0.isReadOnlyReference })
+            let result = try LatticeArchiveService.readArchive(at: source, materializePDFsTo: output)
+            let attachments = result.snapshot.papers[0].attachments
+            let expected = [Data("first secondary payload".utf8) + Data([0, 255]), Data("second secondary payload".utf8)]
+            try require(attachments.count == 2 && Set(attachments.map(\.filePath)).count == 2)
+            for (attachment, bytes) in zip(attachments, expected) {
+                try require(attachment.kind == .file && attachment.displayName == "same name.txt" && !attachment.missing && !attachment.isReadOnlyReference)
+                let actual = try Data(contentsOf: attachment.url)
+                try require(SHA256.hash(data: actual) == SHA256.hash(data: bytes))
+            }
+            try require(attachments[0].id == UUID(uuidString: "00000000-0000-0000-0000-000000000010"))
+            let dateFormatter = ISO8601DateFormatter(); dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            try require(attachments[0].addedAt == dateFormatter.date(from: "2026-07-30T02:03:04.125Z"))
+            try require(result.snapshot.papers[0].annotations[0].note == "fixture annotation note")
+            let store = LibraryStore(persistenceURL: directory.appendingPathComponent("secondary-restored/library.json"))
+            try LatticeArchiveService.persist(result, into: store)
+            let restored = try LatticeArchiveService.readSnapshot(at: store.persistenceURL)
+            try require(restored.papers[0].attachments.map(\.id) == attachments.map(\.id))
+            for (attachment, bytes) in zip(restored.papers[0].attachments, expected) {
+                let actual = try Data(contentsOf: attachment.url)
+                try require(SHA256.hash(data: actual) == SHA256.hash(data: bytes))
+            }
+            let after = try Data(contentsOf: source)
+            try require(after == before)
+        }
+        check("metadata-only secondary attachments retain identity and date without inventing accessible files") {
+            let result = try LatticeArchiveService.readArchive(at: directory.appendingPathComponent("metadata-only-attachment.lattice"))
+            let attachment = result.snapshot.papers[0].attachments[0]
+            try require(attachment.missing && attachment.isReadOnlyReference && attachment.displayName == "same name.txt")
+            try require(attachment.id == UUID(uuidString: "00000000-0000-0000-0000-000000000010"))
+            try require(!FileManager.default.fileExists(atPath: attachment.filePath) && result.attachmentFileCount == 0)
+        }
+        for name in ["missing-attachment", "attachment-traversal", "attachment-wildcard", "attachment-duplicate-id",
+                     "attachment-duplicate-payload", "attachment-bad-count", "attachment-symlink", "attachment-corrupt-payload"] {
+            check("reject \(name) without partial extracted bytes or published restore") {
+                let target = directory.resolvingSymlinksInPath().appendingPathComponent("reject-\(name)-files")
+                let store = LibraryStore(persistenceURL: directory.appendingPathComponent("reject-\(name)/library.json"))
+                var rejected = false
+                do { _ = try LatticeArchiveService.importArchive(at: directory.appendingPathComponent("\(name).lattice"), into: store, materializePDFsTo: target) }
+                catch { rejected = true }
+                try require(rejected && store.papers.isEmpty && !FileManager.default.fileExists(atPath: store.persistenceURL.path))
+                try require(!FileManager.default.fileExists(atPath: target.path))
+            }
+        }
         for name in ["bad-json", "duplicate-id", "missing-reference", "bad-count", "bad-type", "duplicate-member", "traversal", "oversized-json", "bad-local-header"] {
             check("reject \(name) without writing target") {
                 let target = directory.appendingPathComponent("reject-\(name)/library.json")
@@ -75,7 +127,7 @@ struct LatticeArchiveTests {
                 try require(rejected && !FileManager.default.fileExists(atPath: target.path))
             }
         }
-        print("Archive checks: \(14 - failures) passed, \(failures) failed")
+        print("Archive checks: \(checks - failures) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
     }
 }

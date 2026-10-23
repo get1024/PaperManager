@@ -111,7 +111,7 @@ struct NativeTableAXClient {
             let titleValues = values[Cell(row: row, column: 0)] ?? []
             guard let title = titleValues.first(where: { $0.hasPrefix("AX Perf Title ") }),
                   let source = Int(title.dropFirst("AX Perf Title ".count)) else { continue }
-            let expectedValues = [1: "AX Perf Author \(source); Shared Author", 2: "2026", 3: "AX Perf Source \(source)",
+            let expectedValues = [1: "AX Perf Author \(source) & Shared Author", 2: "2026", 3: "AX Perf Source \(source)",
                                   4: String(source % 5 + 1), 6: "AX Perf Note \(source)"]
             guard expectedValues.allSatisfy({ values[Cell(row: row, column: $0.key)]?.contains($0.value) == true }),
                   values[Cell(row: row, column: 5)]?.isEmpty == false else { continue }

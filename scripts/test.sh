@@ -19,16 +19,17 @@ run() {
 }
 
 core() {
-  for name in reconstruction local-api lattice-archive editing sidebar file-library zotero-import import-backup localization-templates metadata-intents; do
+  for name in reconstruction local-api lattice-archive editing sidebar file-library zotero-import import-backup localization-templates metadata-intents metadata-refresh service-correctness; do
     run "$name" "$TASK_ROOT/scripts/test-$name.sh"
   done
   run connector "$TASK_ROOT/Tests/Connector/run.sh"
 }
 
 ui() {
-  for name in native-table native-window-group settings-window-group; do
+  for name in native-table native-window-group settings-window-coordinator add-paper-sheets paper-reader-annotations inspector-title-selection inspector-hover-geometry; do
     run "$name" "$TASK_ROOT/scripts/test-$name.sh"
   done
+  run inspector-direct-editing "$TASK_ROOT/scripts/test-inspector-direct-editing.sh" --run
 }
 
 case "$GROUP" in

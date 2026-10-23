@@ -13,7 +13,7 @@ struct SettingsWindowGroupSmoke: App {
             SettingsView()
                 .environmentObject(fixture.store)
                 .environmentObject(fixture.api)
-                .frame(width: 780, height: 640)
+                .frame(width: 780, height: 572)
                 .onAppear { fixture.start() }
         }
     }

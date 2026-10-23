@@ -9,6 +9,12 @@ struct EditingRegression {
     private static var passed = 0
 
     static func main() async {
+        if ProcessInfo.processInfo.environment["PAPERMANAGER_EDITING_CASE"] == "failed-window-retention" {
+            await run("A failed window draft survives until a later successful global flush", testFailedWindowRetention)
+            for failure in failures { print("FAIL: \(failure)") }
+            print("Editing retention regression: \(passed) passed, \(failures.count) failed")
+            exit(failures.isEmpty ? 0 : 1)
+        }
         await run("Quit flush persists an edit before its debounce expires", testTerminationFlush)
         await run("Selection changes commit the previous paper and reject stale editor writes", testSelectionChanges)
         await run("Autosave commits the latest draft without a Save action", testAutosave)
@@ -184,7 +190,18 @@ struct EditingRegression {
         try expect(flushed, "A retained closed-window draft could not be retried")
         try expect(LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)?.title == draft.title,
                    "A retained closed-window draft never reached disk")
-        try expect(retained == nil, "A successfully saved closed-window session was retained indefinitely")
+        // Cancelling the autosave and draining bridged NSHashTable arrays can
+        // release their final temporary references on a later executor turn.
+        // Bound that lifetime instead of assuming immediate ARC destruction.
+        var drains = 0
+        while retained != nil && drains < 20 {
+            await Task.yield()
+            try await Task.sleep(nanoseconds: 10_000_000)
+            autoreleasepool { }
+            drains += 1
+        }
+        try expect(retained == nil, "A saved closed-window session remained retained after 200ms of scheduler drains")
+        print("DETAIL: Saved closed-window draft released after \(drains) scheduler drains")
         retained = nil
     }
 

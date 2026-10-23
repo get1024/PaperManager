@@ -14,12 +14,14 @@ mkdir -p "$TEST_WORK_DIR/Sources" "$TASK_ROOT/.build/test-module-cache"
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
     "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
     "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
+    "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
     "$TASK_ROOT/Tests/InspectorAccessibilitySmoke.swift" "$TEST_WORK_DIR/Sources/"
+cp "$TASK_ROOT"/Sources/PaperManager/Views/NativeLibrary*.swift "$TEST_WORK_DIR/Sources/"
 cp "${PAPERMANAGER_AX_NATIVE_SOURCE:-$TASK_ROOT/Sources/PaperManager/Views/NativeLibraryView.swift}" "$TEST_WORK_DIR/Sources/NativeLibraryView.swift"
 # Instrument only the disposable copied source, without changing its behavior.
-python3 - "$TEST_WORK_DIR/Sources/NativeLibraryView.swift" <<'PY'
+python3 - "$TEST_WORK_DIR/Sources/NativeLibraryCells.swift" <<'PY'
 import pathlib,sys
-p=pathlib.Path(sys.argv[1]);s=p.read_text();start=s.index('private final class NativeTextCell: NSTableCellView {');end=s.index('private final class NativeRatingCell:',start)
+p=pathlib.Path(sys.argv[1]);s=p.read_text();start=s.index('final class NativeTextCell: NSTableCellView {');end=s.index('final class NativeRatingCell:',start)
 cell=s[start:end]
 cell=cell.replace('super.init(frame: .zero)','super.init(frame: .zero)\n        nativeAXPerfTextCellInitializations += 1',1)
 signature='func configure(symbol: String = "", text: String, trailing: String = "") {'
