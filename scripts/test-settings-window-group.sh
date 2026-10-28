@@ -12,7 +12,7 @@ cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperMa
   "$TASK_ROOT/Sources/PaperManager/Views/SettingsView.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/HelpView.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
-  "$TASK_ROOT/Sources/PaperManager/Views/PaperReadingView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/PaperPDFPreview.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/ZoteroImportView.swift" \
   "$TASK_ROOT/Tests/SettingsWindowGroupSmoke.swift" "$TEST_WORK_DIR/Sources/"

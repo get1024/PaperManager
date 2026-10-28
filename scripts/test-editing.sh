@@ -10,7 +10,7 @@ mkdir -p "$TEST_WORK_DIR/source"
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
   "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
-  "$TASK_ROOT/Sources/PaperManager/Views/PaperReadingView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/PaperPDFPreview.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
   "$TASK_ROOT/Tests/EditingRegression.swift" "$TEST_WORK_DIR/source/"
 mkdir -p "$TASK_ROOT/.build/test-module-cache"

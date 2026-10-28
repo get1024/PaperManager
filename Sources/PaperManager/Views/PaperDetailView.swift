@@ -311,8 +311,6 @@ private struct PaperEditorView: View {
     @Binding var rating: Int
     var isCurrentPaper: () -> Bool
     var onCommitDraft: () -> Bool
-    @State private var previewPage = 0
-    @State private var previewPageCount = 0
     @State private var selectedTab: InspectorTab = .metadata
     @State private var showMoreFields = false
     @State private var showAdvancedFields = false
@@ -371,8 +369,6 @@ private struct PaperEditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                PaperReadingView(store: store, session: store.readingSession, paperID: paper.id,
-                                 previewPage: previewPage, pageCount: previewPageCount)
                 citationSection.padding(.top, -2)
 
                 if isEditing, paper.customFields.contains(where: { !$0.pinned }) {
@@ -614,30 +610,16 @@ private struct PaperEditorView: View {
             }
             .padding(.bottom, 4.5)
 
-            HStack(alignment: .top, spacing: 10) {
-                headerMetadata.frame(maxWidth: .infinity, alignment: .leading)
+            Group {
                 if let attachment = paper.primaryPDF {
-                    PaperPDFPreview(attachment: attachment, pageIndex: $previewPage, pageCount: $previewPageCount)
-                        .padding(.top, 14)
+                    PaperPDFPreview(attachment: attachment) { titleEditor }
+                        .id(attachment)
+                } else {
+                    titleEditor
                 }
             }
-            .onChange(of: paper.primaryPDF) { _, _ in previewPage = 0; previewPageCount = 0 }
-        }
-    }
+            .padding(.top, 14)
 
-    private var headerMetadata: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            InspectorInlineEditor(text: $paper.title, placeholder: "Untitled Paper",
-                                  font: .system(size: 15, weight: .bold, design: .serif),
-                                  nativeFont: .inspectorSerif(size: 15, weight: .bold), color: .primary,
-                                  multiline: true, lineSpacing: 4, editingLineSpacing: 2,
-                                  identifier: "paper-field-title",
-                                  isBulkEditing: isEditing,
-                                  highlightInsets: EdgeInsets(top: 6.5, leading: 6.5, bottom: 5.5, trailing: 8.5),
-                                  isCurrent: isCurrentPaper, onCommit: onCommitDraft)
-                .padding(.horizontal, 8)
-                .padding(.top, 14)
-                .offset(y: -2)
             InspectorInlineEditor(text: Binding(get: { paper.authorsText }, set: { paper.authorsText = $0 }),
                                   font: .system(size: 12), nativeFont: .systemFont(ofSize: 12),
                                   multiline: true, lineSpacing: 5.5, editingLineSpacing: 0,
@@ -655,6 +637,18 @@ private struct PaperEditorView: View {
                 .padding(.horizontal, 8)
                 .padding(.top, 12)
         }
+    }
+
+    private var titleEditor: some View {
+        InspectorInlineEditor(text: $paper.title, placeholder: "Untitled Paper",
+                              font: .system(size: 15, weight: .bold, design: .serif),
+                              nativeFont: .inspectorSerif(size: 15, weight: .bold), color: .primary,
+                              multiline: true, lineSpacing: 4, editingLineSpacing: 2,
+                              identifier: "paper-field-title",
+                              isBulkEditing: isEditing,
+                              highlightInsets: EdgeInsets(top: 6.5, leading: 6.5, bottom: 5.5, trailing: 8.5),
+                              isCurrent: isCurrentPaper, onCommit: onCommitDraft)
+            .padding(.horizontal, 8)
     }
 
     private var collectionSelector: some View {

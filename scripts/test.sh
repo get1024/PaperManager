@@ -19,7 +19,7 @@ run() {
 }
 
 core() {
-  run reading "$TASK_ROOT/scripts/test-reading.sh"
+  run pdf-preview "$TASK_ROOT/scripts/test-pdf-preview.sh"
   for name in reconstruction local-api lattice-archive editing sidebar file-library zotero-import import-backup import-preview library-query localization-templates metadata-intents metadata-refresh service-correctness; do
     run "$name" "$TASK_ROOT/scripts/test-$name.sh"
   done

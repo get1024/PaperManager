@@ -11,12 +11,12 @@
   },
   "generator": "scripts/tools/DocumentationPreview.swift",
   "generatorSHA256": {
-    "scripts/render-readme-images.sh": "92157d8b10ce91f5e2577a1896785e8c34145f14c25e783eb28c32752aef9df7",
+    "scripts/render-readme-images.sh": "5c86e42cb4b70ca5b13523a30db2e786b91172587de1cc1528cbbdd1577edbc5",
     "scripts/tools/DocumentationPreview.swift": "341268df6ced86086055c02ed98a38fe6c21e587147b24d3723cb3b8c91beb98"
   },
   "imageSHA256": {
     "import-preview.png": "9ad3f134193c242efe6d541681e3e6af7608acfcc3640cab6f1adac03aaac1da",
-    "library.png": "d42446d956c302a1dfc8263cde3db79aa49e5deb0cc25c7413d87fe1e1653258",
+    "library.png": "b01aed0b4ba5a6e7185e5ecbc72df713e7880100942611a90d6fd4ab522fde5b",
     "templates.png": "8684a55099db0b064a4a8386eee38033d2376353a62583ff4f57e0728a9a5292"
   },
   "images": [
@@ -78,8 +78,7 @@
   },
   "sourceSHA256": {
     "Sources/PaperManager/Models/AppSettings.swift": "3320b6dacc9626856d52eb04d9b8047fd733264cd8204eb646dbe3bec6754aff",
-    "Sources/PaperManager/Models/LibraryModels.swift": "c005804b6d73cd084b4219ffd57d95e85e9e671ec7c331cf8d31a7781c7e3498",
-    "Sources/PaperManager/Models/ReadingRecord.swift": "e1396e4bf1004dc7319112303b670c14519d1d8a1689ab5cdbc8d8bf4deef963",
+    "Sources/PaperManager/Models/LibraryModels.swift": "620f2ff1b92d93b41b50a16c232bf61627a31893194252e1bf7b543af7402b2d",
     "Sources/PaperManager/Services/BackupService.swift": "43c603324e9edd371071cb861d36975e91376800656aa84723061fdea5423005",
     "Sources/PaperManager/Services/BibTeXParser.swift": "8edea778134b1ae2bd59eee419553937d70501a789a1441f4758f8092bbd7dc8",
     "Sources/PaperManager/Services/CitekeyGenerator.swift": "35b3b668ad361a561b678d6d7584ebf3a6afb1881d9860b5919399716db412b0",
@@ -90,7 +89,7 @@
     "Sources/PaperManager/Services/LatticeArchiveService.swift": "cf651fe8651dccd67e8ea4e93725c6659453c0895861fbce6b8d11cd61292f39",
     "Sources/PaperManager/Services/LatticeImportService.swift": "234c049a1ef4913a8368ff1964f6d93b0f15ccba1bbea06b650a180f6e94c4d9",
     "Sources/PaperManager/Services/LibraryQuery.swift": "d892802d32e3690ee311e6ae13afd54c0616b32dfafab00ecf7f283b73040c83",
-    "Sources/PaperManager/Services/LibraryStore.swift": "16759962e7943e3e99256381205cd3dbaa736ae52d7ea669bc31ec948885c061",
+    "Sources/PaperManager/Services/LibraryStore.swift": "26db1d68a82ac863793e26cf557b7fc251046429f78e1c9f24a37912603e3dae",
     "Sources/PaperManager/Services/LocalAPIServer.swift": "7e22cb8a227471d71a426ecf7cacb79569fb3bda8ef52980dae587df13b797b5",
     "Sources/PaperManager/Services/MetadataTemplateService.swift": "eb82242f1df1194b20ef4df7827e643471c38f61ddd36bc6f5af040bb4feebc3",
     "Sources/PaperManager/Services/PDFMetadataExtractor.swift": "551c001e4f113579d0f7bff18f886c1bba167a7f516cc3e07234d925abc63406",
@@ -99,7 +98,6 @@
     "Sources/PaperManager/Services/PortableBackupService.swift": "9e136f60cc8e9d8b4ec985331c7b0e04fddeef46a3cbdcc3736494773caf792e",
     "Sources/PaperManager/Services/QuickLookService.swift": "d0eba9c82b4927a3ae90d0ff9e607c1373cf7ade04ba2e5ed264e9e70fd3d4a5",
     "Sources/PaperManager/Services/RISParser.swift": "b1ce13f3311da27c8d3078af3bc7fc14d757bfd84e72bee73092f61a781c928c",
-    "Sources/PaperManager/Services/ReadingSessionService.swift": "1fd4aa29730d1fa32f396afdc8038acf6571eb6b50caeab7def6a004605be66f",
     "Sources/PaperManager/Services/TemplateRenderer.swift": "9be540080b00565fada44c9e4859df9229f90f88c73193d5eaffb5861c7b6c48",
     "Sources/PaperManager/Services/Utilities.swift": "08864f10a4398ccb5efff7a92e27c8998c6a35f03a8217609dc4b656622c43fd",
     "Sources/PaperManager/Services/ZoteroImportService.swift": "43f63eb25b8f03767c947ea89bcae779b91d7dd75be68cfd5ac30804a48e3971",
@@ -113,8 +111,8 @@
     "Sources/PaperManager/Views/NativeLibraryTable.swift": "33ac5cf20ed4b82c4b6eefe404d8085413c2587164e7fcf07a002b7e29287117",
     "Sources/PaperManager/Views/NativeLibraryToolbar.swift": "88b33ed3daf0e81837fd63bad8752a78d13145da3d102ef6741566bc923c0dbf",
     "Sources/PaperManager/Views/NativeLibraryView.swift": "359949bd0bbb86bec5be9d73bed7dbdbd9414f27b511faf71825a850dbf159c1",
-    "Sources/PaperManager/Views/PaperDetailView.swift": "b7000f5b8699024bf973c935234cf57d3ecd90b5eba2a4e29889258025435bb3",
-    "Sources/PaperManager/Views/PaperReadingView.swift": "6188f0789d210bb14ef2c86f659e9f9cc19104b7cb61affab7113ada4bf1440a",
+    "Sources/PaperManager/Views/PaperDetailView.swift": "a05463cdc9883524de08270effa35c350b134f1a88d6dd39e4b66e770a71f073",
+    "Sources/PaperManager/Views/PaperPDFPreview.swift": "2087d4cef60a434009851e4caa377d2ee35a0154e5f3d151a38749a4efae8eef",
     "Sources/PaperManager/Views/SettingsView.swift": "aa3199851333dab5a9cf6020429b5596b9e031420b7620f5adc43a3ab9dfbe39",
     "Sources/PaperManager/Views/ViewUtilities.swift": "734c20cab56d6797f6f7761d9ce66bb2b7bca21d4908a5d7f062d874634a254e",
     "Sources/PaperManager/Views/ZoteroImportView.swift": "346f874c51ed98dbcbdb628431fc57ccf181f00743e6c8aa6544152e552846ae"

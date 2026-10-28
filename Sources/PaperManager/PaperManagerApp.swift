@@ -93,7 +93,7 @@ final class PaperManagerAppDelegate: NSObject, NSApplicationDelegate {
     private func flushDraftsForTermination(_ sender: NSApplication) -> Bool {
         // Finish a field editor before flushing the debounced inspector drafts.
         for window in sender.windows { window.makeFirstResponder(nil) }
-        guard PaperDraftSession.flushAll(), ReadingSessionService.pauseAll() else {
+        guard PaperDraftSession.flushAll() else {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = PMLocalization.text("草稿尚未保存")

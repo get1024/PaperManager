@@ -66,7 +66,6 @@ private final class WeakLibraryStore {
 
 @MainActor
 final class LibraryStore: ObservableObject {
-    lazy var readingSession = ReadingSessionService(store: self)
     private static var liveStores: [WeakLibraryStore] = []
     private static var fileOperationShutdownRequested = false
     @Published private(set) var snapshot: LibrarySnapshot {
@@ -383,7 +382,6 @@ final class LibraryStore: ObservableObject {
     }
 
     func load() {
-        guard readingSession.pause() else { return }
         attachmentRefreshTask?.cancel()
         attachmentRefreshTask = nil
         attachmentRefreshRequest = UUID()
@@ -469,7 +467,6 @@ final class LibraryStore: ObservableObject {
                 .appendingPathComponent("library-unreadable-\(UUID().uuidString).json")
             try FileManager.default.copyItem(at: persistenceURL, to: preserved)
         }
-        guard readingSession.pause() else { throw PaperManagerError.message("阅读时间尚未保存。") }
         try writeSnapshot(newSnapshot)
         // Restored/merged snapshots may deliberately reuse paper IDs and their
         // identifiers. Requests issued against the previous library must never

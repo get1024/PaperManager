@@ -343,7 +343,6 @@ struct Paper: Identifiable, Codable, Hashable {
     var dateAdded: Date = Date()
     var dateModified: Date = Date()
     var lastOpenedAt: Date?
-    var reading: ReadingRecord?
 
     var displayTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Paper" : title

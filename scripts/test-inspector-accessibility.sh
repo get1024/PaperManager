@@ -13,7 +13,7 @@ mkdir -p "$TEST_WORK_DIR/Sources" "$TASK_ROOT/.build/test-module-cache"
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
     "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
     "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
-  "$TASK_ROOT/Sources/PaperManager/Views/PaperReadingView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/PaperPDFPreview.swift" \
     "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
     "$TASK_ROOT"/Sources/PaperManager/Views/NativeLibrary*.swift \
     "$TASK_ROOT/Tests/InspectorAccessibilitySmoke.swift" "$TEST_WORK_DIR/Sources/"
