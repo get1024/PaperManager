@@ -56,6 +56,10 @@
 		91DB9ED73CB3FAB0841DE441 /* NativeLibraryCells.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413F366FD446BD8455232E7C /* NativeLibraryCells.swift */; };
 		FC0CA553113372D45879596E /* NativeLibraryToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BBD0A380C20190C8A8570B1 /* NativeLibraryToolbar.swift */; };
 		E85DFEECBF4F7229E52EDA66 /* NativeLibraryGeometryLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A1517D65A39A29A545B818 /* NativeLibraryGeometryLog.swift */; };
+		0483017A1C4249DD0B3EA438 /* ReadingRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA03AE87FA6CE0A6B9683B7C; };
+		0E6E2459397AAE06DC4FCFDD /* ReadingSessionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D7CBC9CE461113B3D87FA58; };
+		FFDAF46C192C4F3D9AC06054 /* PDFPreviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6EE78C44179F769AE724FE; };
+		52A79F1FB337E59912E2A922 /* PaperReadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501BAADDD2C92F9112D6414; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -111,6 +115,10 @@
 		413F366FD446BD8455232E7C /* NativeLibraryCells.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLibraryCells.swift; sourceTree = "<group>"; };
 		4BBD0A380C20190C8A8570B1 /* NativeLibraryToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLibraryToolbar.swift; sourceTree = "<group>"; };
 		72A1517D65A39A29A545B818 /* NativeLibraryGeometryLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeLibraryGeometryLog.swift; sourceTree = "<group>"; };
+		EA03AE87FA6CE0A6B9683B7C /* ReadingRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingRecord.swift; sourceTree = "<group>"; };
+		1D7CBC9CE461113B3D87FA58 /* ReadingSessionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSessionService.swift; sourceTree = "<group>"; };
+		9E6EE78C44179F769AE724FE /* PDFPreviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreviewService.swift; sourceTree = "<group>"; };
+		7501BAADDD2C92F9112D6414 /* PaperReadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperReadingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -192,6 +200,7 @@
 			children = (
 				AF0000000000000000000002 /* AppSettings.swift */,
 				AF0000000000000000000003 /* LibraryModels.swift */,
+				EA03AE87FA6CE0A6B9683B7C /* ReadingRecord.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -220,6 +229,8 @@
 				AF000000000000000000000D /* RISParser.swift */,
 				AF000000000000000000000E /* TemplateRenderer.swift */,
 				AF000000000000000000000F /* Utilities.swift */,
+				1D7CBC9CE461113B3D87FA58 /* ReadingSessionService.swift */,
+				9E6EE78C44179F769AE724FE /* PDFPreviewService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -242,6 +253,7 @@
 				AF0000000000000000000081 /* InspectorInlineEditor.swift */,
 				AF0000000000000000000014 /* SettingsView.swift */,
 				AF0000000000000000000016 /* ViewUtilities.swift */,
+				7501BAADDD2C92F9112D6414 /* PaperReadingView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -376,6 +388,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				52A79F1FB337E59912E2A922 /* PaperReadingView.swift in Sources */,
+				FFDAF46C192C4F3D9AC06054 /* PDFPreviewService.swift in Sources */,
+				0E6E2459397AAE06DC4FCFDD /* ReadingSessionService.swift in Sources */,
+				0483017A1C4249DD0B3EA438 /* ReadingRecord.swift in Sources */,
 				AB0000000000000000000001 /* PaperManagerApp.swift in Sources */,
 				59B5B91A44D08893567F6AEA /* MetadataIntents.swift in Sources */,
 				A17E220677AB3C131E9EF8E2 /* FileLibraryService.swift in Sources */,
@@ -565,7 +581,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20261024.34;
+				CURRENT_PROJECT_VERSION = 20261028.1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -575,7 +591,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aurelian.PaperManager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -589,7 +605,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 20261024.34;
+				CURRENT_PROJECT_VERSION = 20261028.1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -599,7 +615,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aurelian.PaperManager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

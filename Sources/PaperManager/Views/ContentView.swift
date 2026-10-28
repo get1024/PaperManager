@@ -104,7 +104,7 @@ struct ContentView: View {
             // titlebar own window dragging; background dragging otherwise makes AppKit
             // recalculate opaque drag regions for every accessibility/layout update.
             window.isMovableByWindowBackground = false
-            window.contentMinSize = NSSize(width: 1080, height: 680)
+            window.contentMinSize = NSSize(width: 1200, height: 560)
         })
         .preferredColorScheme(store.settings.appearance.preferredColorScheme)
         .environment(\.locale, PMLocalization.locale(for: store.settings.languageIdentifier))

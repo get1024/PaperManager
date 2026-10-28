@@ -343,6 +343,7 @@ struct Paper: Identifiable, Codable, Hashable {
     var dateAdded: Date = Date()
     var dateModified: Date = Date()
     var lastOpenedAt: Date?
+    var reading: ReadingRecord?
 
     var displayTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled Paper" : title
@@ -541,6 +542,7 @@ struct MetadataTemplate: Identifiable, Codable, Hashable {
 }
 
 struct LibrarySnapshot: Codable {
+    static let supportedSchemaVersion = 1
     var schemaVersion: Int = 1
     var papers: [Paper] = []
     var collections: [PaperCollection] = []

@@ -19,6 +19,9 @@ struct EditingRegression {
         await run("Selection changes commit the previous paper and reject stale editor writes", testSelectionChanges)
         await run("Autosave commits the latest draft without a Save action", testAutosave)
         await run("Concurrent native edits and read-only attachments survive draft commits", testConcurrentEdits)
+        await run("Rating changes commit immediately while inspector text remains a draft", testImmediateRatingEdits)
+        await run("Delayed inspector drafts preserve the latest rating without a receive callback", testRatingDraftMerge)
+        await run("Failed rating changes retain committed state and can be retried", testRatingFailure)
         await run("Deleting a paper while editing cannot recreate it", testDeletedPaper)
         await run("Type-specific fields remain editable and identifiers stay independent", testFieldCoverage)
         await run("BibTeX recognizes and exports all added paper types", testPaperTypes)
@@ -136,6 +139,72 @@ struct EditingRegression {
         store.deletePapers(ids: [first.id])
         editing.flush()
         try expect(LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id) == nil, "Flushing a deleted paper recreated its record")
+    }
+
+    private static func testImmediateRatingEdits() async throws {
+        let (root, store, first, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let editing = PaperDraftSession(autosaveDelayNanoseconds: 10_000_000_000)
+        editing.select(first.id, in: store)
+        var draft = editing.draft
+        draft.notes = "Still typing inspector notes"
+        editing.edit(draft)
+
+        try expect(store.updateRating(4, for: first.id), "A rating click failed to commit")
+        try expect(store.paper(with: first.id)?.rating == 4, "A rating click waited for the draft debounce")
+        let reloaded = LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)!
+        try expect(reloaded.rating == 4, "Rating did not reach disk before the update returned")
+        try expect(reloaded.notes.isEmpty, "A rating click prematurely committed unrelated inspector text")
+        editing.receive(store.paper(with: first.id))
+        try expect(editing.draft.rating == 4 && editing.draft.notes == draft.notes,
+                   "Receiving the rating discarded the pending inspector text")
+
+        try expect(store.updateRating(0, for: first.id), "Clearing a rating failed")
+        try expect(LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)?.rating == 0,
+                   "Clearing the rating waited for another save")
+        try expect(editing.flush(), "Pending text failed to commit after a rating change")
+        let saved = LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)!
+        try expect(saved.rating == 0 && saved.notes == draft.notes, "The pending draft restored a superseded rating")
+    }
+
+    private static func testRatingDraftMerge() async throws {
+        let (root, store, first, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let editing = PaperDraftSession(autosaveDelayNanoseconds: 10_000_000_000)
+        editing.select(first.id, in: store)
+        var draft = editing.draft
+        draft.title = "Pending inspector title"
+        editing.edit(draft)
+
+        // Deliberately leave the draft's baseline untouched, as can happen
+        // before SwiftUI delivers its next snapshot onChange callback.
+        var external = store.paper(with: first.id)!
+        external.doi = "10.5555/newest-metadata"
+        try store.updatePaperDurably(external)
+        try expect(store.updateRating(2, for: first.id), "Initial rating change failed")
+        try expect(store.updateRating(5, for: first.id), "A second rapid rating change failed")
+        try expect(editing.flush(), "A stale inspector baseline could not be merged")
+        let saved = LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)!
+        try expect(saved.rating == 5, "A pending text draft overwrote the newest rating")
+        try expect(saved.title == draft.title && saved.doi == external.doi,
+                   "Field-scoped rating edits lost a pending or concurrent metadata change")
+    }
+
+    private static func testRatingFailure() async throws {
+        let (root, store, first, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try expect(store.updateRating(2, for: first.id), "Could not establish the committed rating")
+        let preserved = try blockPersistence(store)
+        try expect(!store.updateRating(5, for: first.id), "An unwritable rating was reported as saved")
+        try expect(store.paper(with: first.id)?.rating == 2, "A failed rating write published an optimistic value")
+        try expect(store.statusMessage != nil, "A failed rating write had no recoverable error")
+        try unblockPersistence(store, preserved: preserved)
+        try expect(LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)?.rating == 2,
+                   "A failed rating write changed the durable value")
+        try expect(store.updateRating(4, for: first.id), "A rating could not be retried after persistence recovered")
+        try expect(LibraryStore(persistenceURL: store.persistenceURL).paper(with: first.id)?.rating == 4,
+                   "The retried rating did not reach disk")
+        try expect(!store.updateRating(3, for: UUID()), "Updating a removed paper unexpectedly succeeded")
     }
 
     private static func blockPersistence(_ store: LibraryStore) throws -> URL {

@@ -39,6 +39,35 @@ extension String {
         lowercased().hasPrefix("http://doi.org/")
     }
 
+    /// Compare DOI identities without changing the user's original metadata.
+    /// Only complete DOI values qualify, so malformed hints cannot suppress a
+    /// different work merely because they share a prefix or a title.
+    var normalizedDOI: String? {
+        var value = trimmed.replacingOccurrences(of: #"(?i)^doi:\s*"#, with: "", options: .regularExpression).trimmed
+        let resolverPrefix = #"(?i)^https?://(?:dx\.)?doi\.org/"#
+        if let prefix = value.range(of: resolverPrefix, options: .regularExpression) {
+            value = String(value[prefix.upperBound...])
+            value = value.removingPercentEncoding ?? value
+        }
+        value = value.trimmed.lowercased()
+        guard value.range(of: #"^10\.\d{4,9}/\S+$"#, options: .regularExpression) != nil else { return nil }
+        return value
+    }
+
+    var normalizedISBN: String? {
+        let value = trimmed.replacingOccurrences(of: #"(?i)^isbn(?:[- ]1[03])?\s*:?\s*"#, with: "", options: .regularExpression)
+        guard value.range(of: #"^[0-9Xx][0-9Xx\s-]+$"#, options: .regularExpression) != nil else { return nil }
+        let digits = value.replacingOccurrences(of: #"[\s-]"#, with: "", options: .regularExpression).uppercased()
+        return digits.count == 10 || digits.count == 13 ? digits : nil
+    }
+
+    var normalizedISSN: String? {
+        let value = trimmed.replacingOccurrences(of: #"(?i)^(?:e-?)?issn\s*:?\s*"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "-", with: "").uppercased()
+        guard value.range(of: #"^[0-9]{7}[0-9X]$"#, options: .regularExpression) != nil else { return nil }
+        return value
+    }
+
     var looksLikeArxivID: Bool {
         let clean = trimmed
             .replacingOccurrences(of: #"(?i)^arxiv:\s*"#, with: "", options: .regularExpression)

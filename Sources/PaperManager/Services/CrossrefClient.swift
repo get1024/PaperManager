@@ -17,6 +17,7 @@ struct PaperMetadata: Codable, Hashable {
     var pages: String = ""
     var doi: String = ""
     var isbn: String = ""
+    var issns: [String]?
     var url: String = ""
     var urlDate: String = ""
     var abstract: String = ""
@@ -55,6 +56,11 @@ struct PaperMetadata: Codable, Hashable {
         if shouldFill(result.pages, with: pages, replaceExisting: replaceExisting) { result.pages = pages }
         if shouldFill(result.doi, with: doi, replaceExisting: replaceExisting) { result.doi = doi }
         if shouldFill(result.isbn, with: isbn, replaceExisting: replaceExisting) { result.isbn = isbn }
+        for serial in issns ?? [] where serial.normalizedISSN != nil {
+            if !result.customFields.contains(where: { $0.key.trimmed.caseInsensitiveCompare("ISSN") == .orderedSame && $0.value.normalizedISSN == serial.normalizedISSN }) {
+                result.customFields.append(CustomField(key: "ISSN", value: serial))
+            }
+        }
         if shouldFill(result.url, with: url, replaceExisting: replaceExisting) { result.url = url }
         if shouldFill(result.urlDate ?? "", with: urlDate, replaceExisting: replaceExisting) { result.urlDate = urlDate.nilIfBlank }
         if shouldFill(result.abstract, with: abstract, replaceExisting: replaceExisting) { result.abstract = abstract }
@@ -103,6 +109,7 @@ struct PaperMetadata: Codable, Hashable {
         paper.pages = pages
         paper.doi = doi
         paper.isbn = isbn
+        paper.customFields = (issns ?? []).filter { $0.normalizedISSN != nil }.map { CustomField(key: "ISSN", value: $0) }
         paper.url = url
         paper.urlDate = urlDate.nilIfBlank
         paper.abstract = abstract
@@ -155,9 +162,7 @@ enum MetadataLookupClient {
     }
 
     static func lookup(doi: String?, arxivID: String?, isbn: String?, title: String?, sources: Sources = .live) async throws -> PaperMetadata {
-        let cleanDOI = doi?.trimmed
-            .replacingOccurrences(of: #"(?i)^https?://(?:dx\.)?doi\.org/"#, with: "", options: .regularExpression)
-            .replacingOccurrences(of: #"(?i)^doi:\s*"#, with: "", options: .regularExpression).nilIfBlank
+        let cleanDOI = doi?.normalizedDOI ?? doi?.nilIfBlank
         // arXiv's DataCite DOIs are not generally present in Crossref. Resolve
         // their embedded identifier directly rather than failing every refresh.
         let arxivPrefix = "10.48550/arxiv."
@@ -194,11 +199,7 @@ enum MetadataLookupClient {
 
 enum CrossrefClient {
     static func fetch(doi: String) async throws -> PaperMetadata {
-        let cleaned = doi
-            .trimmed
-            .replacingOccurrences(of: "https://doi.org/", with: "", options: [.caseInsensitive])
-            .replacingOccurrences(of: "http://doi.org/", with: "", options: [.caseInsensitive])
-        guard !cleaned.isEmpty,
+        guard let cleaned = doi.normalizedDOI,
               let encoded = cleaned.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "https://api.crossref.org/works/\(encoded)") else {
             throw PaperManagerError.message("Enter a DOI.")
@@ -363,7 +364,8 @@ private struct CrossrefWork: Decodable {
         metadata.issue = issue ?? ""
         metadata.pages = page ?? ""
         metadata.doi = DOI ?? ""
-        metadata.isbn = ISBN?.first ?? ISSN?.first ?? ""
+        metadata.isbn = ISBN?.first ?? ""
+        metadata.issns = ISSN
         metadata.url = URL ?? resource?.primary?.URL ?? ""
         metadata.abstract = abstract?.strippingSimpleHTML() ?? ""
         metadata.type = subtype ?? type ?? ""

@@ -398,8 +398,16 @@ final class WindowGroupSmokeState: ObservableObject {
                     let divider = sidebarSplit.convert(CGPoint(x: sidebarSplit.arrangedSubviews[0].frame.maxX, y: 0), to: nil).x
                     if abs(center - (divider - 26)) > 1 { failures.append("Step \(step): sidebar center \(center) did not track divider \(divider)") }
                 } else if let view = nativeButton {
-                    let center = view.convert(view.bounds, to: nil).midX
-                    if abs(center - 110) > 1 { failures.append("Step \(step): collapsed sidebar center \(center) != 110") }
+                    // AppKit's native toolbar spacing varies across macOS releases.
+                    // Check the actual window-control boundary, not a historical x=110.
+                    let buttonFrame = view.convert(view.bounds, to: nil)
+                    if let zoom = window.standardWindowButton(.zoomButton) {
+                        let controlsEnd = zoom.convert(zoom.bounds, to: nil).maxX
+                        let gap = buttonFrame.minX - controlsEnd
+                        if gap < 4 || gap > 40 {
+                            failures.append("Step \(step): collapsed sidebar overlaps or separates from window controls: gap=\(gap)")
+                        }
+                    } else { failures.append("Step \(step): missing native window controls") }
                 }
             }
             if step == 11, showSidebar { failures.append("Native sidebar action failed to update SwiftUI visibility") }
@@ -552,6 +560,8 @@ final class WindowGroupSmokeState: ObservableObject {
                        "captureMainThread": Thread.isMainThread,
                        "keyWindow": window.isKeyWindow, "appActive": NSApp.isActive,
                        "windowVisible": window.isVisible, "occlusionVisible": window.occlusionState.contains(.visible),
+                       "frontmostBundleIdentifier": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "",
+                       "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
                        "windowLevel": window.level.rawValue,
                        "motionSamplesCompleteAtCapture": ![3, 4, 20, 21, 22].contains(step) || completedMotionSteps.contains(step),
                        "panelTransitionActiveAtCapture": controller.isPanelTransitionActive,
@@ -572,7 +582,8 @@ final class WindowGroupSmokeState: ObservableObject {
                        "actualInspectorCollapsed": controller.isInspectorCollapsed,
                        "inspectorHorizontalLayout": horizontal])
         if frontmostMode, !window.isKeyWindow || !NSApp.isActive || !window.isVisible {
-            failures.append("Step \(step): owned foreground window lost key/active/visible state")
+            let owner = NSWorkspace.shared.frontmostApplication
+            failures.append("Step \(step): owned foreground window lost key/active/visible state (frontmost=\(owner?.bundleIdentifier ?? "unbundled"), pid=\(owner?.processIdentifier ?? 0), expected=\(ProcessInfo.processInfo.processIdentifier))")
         }
     }
 

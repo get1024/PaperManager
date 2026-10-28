@@ -43,6 +43,7 @@ mkdir -p "$TEST_WORK_DIR/Sources" "$TEST_WORK_DIR/Fixture" "$TEST_CONTROL_DIR" \
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
   "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/PaperReadingView.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
   "$TASK_ROOT/Tests/InspectorDirectEditingSmoke.swift" "$TEST_WORK_DIR/Sources/"
 cp "$TASK_ROOT/Tests/InspectorDirectEditingAXClient.swift" "$TEST_WORK_DIR/InspectorDirectEditingAXClient.swift"

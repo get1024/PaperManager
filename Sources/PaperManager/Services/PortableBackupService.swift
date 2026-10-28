@@ -183,7 +183,7 @@ enum PortableBackupService {
         let collectionIDs = Set(snapshot.collections.map(\.id))
         let tagIDs = Set(snapshot.tags.map(\.id))
         let templates = snapshot.metadataTemplates ?? []
-        guard snapshot.schemaVersion == 1, Set(templates.map(\.id)).count == templates.count,
+        guard snapshot.schemaVersion == LibrarySnapshot.supportedSchemaVersion, Set(templates.map(\.id)).count == templates.count,
               paperIDs.count == snapshot.papers.count, collectionIDs.count == snapshot.collections.count,
               tagIDs.count == snapshot.tags.count else { throw invalidArchive() }
         let parents = Dictionary(uniqueKeysWithValues: snapshot.collections.map { ($0.id, $0.parentID) })

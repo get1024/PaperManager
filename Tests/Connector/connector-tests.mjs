@@ -46,7 +46,7 @@ function fakeDocument(entries, title = 'Fallback title', structured = []) {
 }
 
 test('Native CLI version/help and default read-only status', async () => {
-  assert.equal((await cli(['--version'])).stdout.trim(), '1.0.0');
+  assert.equal((await cli(['--version'])).stdout.trim(), '1.1.0');
   assert.match((await cli(['--help'])).stdout, /get-csl-item/);
   const result = await cli(['status']); assert.equal(result.code, 0); assert.equal(result.stderr, '');
   assert.equal(result.json().effectiveReadOnly, true); assert.equal(result.json().clientReadOnly, true);

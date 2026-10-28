@@ -40,6 +40,8 @@ struct PaperDetailView: View {
                 )
             } else if let id = selectedID {
                 PaperEditorView(paper: editing.binding(for: id),
+                                rating: Binding(get: { store.paper(with: id)?.rating ?? 0 },
+                                                set: { store.updateRating($0, for: id) }),
                                 isCurrentPaper: { editing.loadedID == id },
                                 onCommitDraft: { editing.flush() })
                     .id(id)
@@ -306,8 +308,11 @@ private struct PaperEditorView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.colorScheme) private var colorScheme
     @Binding var paper: Paper
+    @Binding var rating: Int
     var isCurrentPaper: () -> Bool
     var onCommitDraft: () -> Bool
+    @State private var previewPage = 0
+    @State private var previewPageCount = 0
     @State private var selectedTab: InspectorTab = .metadata
     @State private var showMoreFields = false
     @State private var showAdvancedFields = false
@@ -366,23 +371,26 @@ private struct PaperEditorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                citationSection.padding(.top, -3)
+                PaperReadingView(store: store, session: store.readingSession, paperID: paper.id,
+                                 previewPage: previewPage, pageCount: previewPageCount)
+                citationSection.padding(.top, -2)
 
                 if isEditing, paper.customFields.contains(where: { !$0.pinned }) {
                     InspectorSection(title: "自定义字段") { customFieldRows }
                 }
 
                 InspectorSection(title: "文库", headerGap: 5) {
-                    InspectorValueRow(title: "评分", labelWidth: 24, minimumHeight: 36) {
-                        HStack(spacing: 8) {
+                    InspectorValueRow(title: "评分", labelWidth: 22, minimumHeight: 36,
+                                      verticalAlignment: .center) {
+                        HStack(spacing: 6) {
                             inspectorStars
-                            Text(paper.rating == 0 ? PMLocalization.text("未评分") : "\(paper.rating) / 5")
+                            Text(rating == 0 ? PMLocalization.text("未评分") : "\(rating) / 5")
                                 .foregroundStyle(.secondary)
                                 .font(.system(size: 10))
                         }
                     }
-                    InspectorValueRow(title: "文集", labelWidth: 24, minimumHeight: 36) { collectionSelector }
-                    InspectorValueRow(title: "标签", labelWidth: 24, minimumHeight: 36) { tagSelector }
+                    InspectorValueRow(title: "文集", labelWidth: 23, minimumHeight: 36) { collectionSelector }
+                    InspectorValueRow(title: "标签", labelWidth: 23, minimumHeight: 36) { tagSelector }
                 }
                 .padding(.top, -1)
 
@@ -411,6 +419,7 @@ private struct PaperEditorView: View {
                     }
                     .disclosureGroupStyle(InspectorContentDisclosureStyle())
                 }
+                .padding(.top, -8)
 
                 if isEditing {
                     InspectorSection(title: "输出预览") {
@@ -428,20 +437,21 @@ private struct PaperEditorView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 20.5)
+            .padding(.top, 21)
             .padding(.bottom, 18)
         }
         .scrollIndicators(.visible)
     }
 
     private var citationSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7.5) {
             HStack {
                 Text(PMLocalization.text("引用"))
                     .font(.system(size: 10, weight: .bold))
                 Spacer()
                 Button { refreshMetadata() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.plain)
+                    .font(.system(size: 10))
                     .help("刷新元数据")
                     .disabled(store.isRefreshingMetadata(paperID: paper.id) || !canRefreshMetadata)
             }
@@ -466,7 +476,7 @@ private struct PaperEditorView: View {
                                                       font: .system(size: 12), nativeFont: .systemFont(ofSize: 12),
                                                       identifier: "paper-field-eprint", highlightInset: 3,
                                                       isCurrent: isCurrentPaper, onCommit: onCommitDraft)
-                                    .frame(width: 48, alignment: .leading)
+                                    .frame(width: 58, alignment: .leading)
                                 Text(PMLocalization.text("预印本分类"))
                                     .font(.system(size: 10))
                                 InspectorInlineEditor(text: $paper.eprintClass, placeholder: "—",
@@ -478,7 +488,7 @@ private struct PaperEditorView: View {
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 14.5) {
                     Button { showMoreFields.toggle() } label: {
                         HStack {
                             Text(PMLocalization.format("更多字段 · %lld", moreFieldValueCount))
@@ -488,6 +498,7 @@ private struct PaperEditorView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     if showMoreFields {
                         VStack(alignment: .leading, spacing: 8) {
@@ -505,23 +516,14 @@ private struct PaperEditorView: View {
                     }
                 }
                 .font(PMTypography.callout)
-                .padding(.top, 4)
+                .padding(.top, 6)
             }
         }
     }
 
     private var inspectorStars: some View {
-        HStack(spacing: 5) {
-            ForEach(1...5, id: \.self) { value in
-                Button { paper.rating = paper.rating == value ? 0 : value } label: {
-                    Image(systemName: value <= paper.rating ? "star.fill" : "star")
-                        .foregroundStyle(value <= paper.rating ? Color.orange : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(value) / 5")
-            }
-        }
-        .font(.system(size: 15))
+        StarRatingView(rating: $rating, starSize: 13, spacing: 7.5, identity: paper.id)
+            .accessibilityIdentifier("inspector-rating")
     }
 
     private var annotationInspector: some View {
@@ -587,7 +589,7 @@ private struct PaperEditorView: View {
                 .menuIndicator(.hidden)
                 .foregroundStyle(.secondary)
                 .fixedSize()
-                .offset(x: -3, y: -1)
+                .offset(x: -3)
                 .help("更改文献类型")
                 Spacer()
                 Button {
@@ -595,12 +597,14 @@ private struct PaperEditorView: View {
                     isEditing.toggle()
                 } label: { Image(systemName: isEditing ? "checkmark" : "pencil") }
                 .buttonStyle(.plain)
+                .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .help(isEditing ? "完成编辑" : "编辑元数据")
                 .accessibilityIdentifier("paper-edit-metadata")
                 if paper.primaryPDF != nil {
                     Button { openPrimaryPDF() } label: { Image(systemName: "doc.text") }
                         .buttonStyle(.plain)
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .help("打开 PDF")
                         .contextMenu {
@@ -608,8 +612,21 @@ private struct PaperEditorView: View {
                         }
                 }
             }
-            .padding(.bottom, 2)
+            .padding(.bottom, 4.5)
 
+            HStack(alignment: .top, spacing: 10) {
+                headerMetadata.frame(maxWidth: .infinity, alignment: .leading)
+                if let attachment = paper.primaryPDF {
+                    PaperPDFPreview(attachment: attachment, pageIndex: $previewPage, pageCount: $previewPageCount)
+                        .padding(.top, 14)
+                }
+            }
+            .onChange(of: paper.primaryPDF) { _, _ in previewPage = 0; previewPageCount = 0 }
+        }
+    }
+
+    private var headerMetadata: some View {
+        VStack(alignment: .leading, spacing: 0) {
             InspectorInlineEditor(text: $paper.title, placeholder: "Untitled Paper",
                                   font: .system(size: 15, weight: .bold, design: .serif),
                                   nativeFont: .inspectorSerif(size: 15, weight: .bold), color: .primary,
@@ -627,7 +644,6 @@ private struct PaperEditorView: View {
                                   identifier: "paper-field-authors",
                                   isBulkEditing: isEditing, isCurrent: isCurrentPaper, onCommit: onCommitDraft)
                 .padding(.horizontal, 8)
-                .padding(.trailing, 4)
                 .padding(.top, 16)
             Text(paper.citekey)
                         .textSelection(.enabled)
@@ -658,6 +674,9 @@ private struct PaperEditorView: View {
             .fixedSize()
             .help("添加到文集")
         }
+        // Native popup buttons can retain their previous AppKit position when
+        // a draft load inserts chips ahead of them in a custom Layout.
+        .id(paper.collectionIDs)
     }
 
     private var tagSelector: some View {
@@ -677,6 +696,7 @@ private struct PaperEditorView: View {
             .fixedSize()
             .help("添加标签")
         }
+        .id(paper.tagIDs)
     }
 
     private var attachmentInspectorRows: some View {
@@ -902,14 +922,15 @@ private struct PaperEditorView: View {
         InspectorValueRow(title: title) {
             HStack(spacing: 6) {
                 InspectorInlineEditor(text: text, placeholder: "—",
-                                      font: monospaced ? .system(size: 12, design: .monospaced) : .system(size: 12),
-                                      nativeFont: monospaced ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 12),
+                                      font: monospaced ? .system(size: isURL ? 11 : 11.5, design: .monospaced) : .system(size: 12),
+                                      nativeFont: monospaced ? .monospacedSystemFont(ofSize: isURL ? 11 : 11.5, weight: .regular) : .systemFont(ofSize: 12),
                                       multiline: axis == .vertical, identifier: identifier,
                                       isBulkEditing: editable, highlightInset: 3,
                                       isCurrent: isCurrentPaper, onCommit: onCommitDraft)
                 if isURL, let url = URL(string: text.wrappedValue), !text.wrappedValue.trimmed.isEmpty {
                     Button { NSWorkspace.shared.open(url) } label: { Image(systemName: "arrow.up.forward.square") }
                         .buttonStyle(.plain)
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .help("打开网址")
                 }
@@ -1052,7 +1073,7 @@ private struct PaperEditorView: View {
 }
 
 private struct InspectorChipFlowLayout: Layout {
-    private let spacing: CGFloat = 6
+    private let spacing: CGFloat = 5
     private let rowSpacing: CGFloat = 10
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -1148,11 +1169,12 @@ private struct InspectorValueRow<Content: View>: View {
     let title: String
     var labelWidth: CGFloat = 74
     var minimumHeight: CGFloat = 0
+    var verticalAlignment: VerticalAlignment = .firstTextBaseline
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: labelWidth < 40 ? 6 : 12) {
+            HStack(alignment: verticalAlignment, spacing: labelWidth < 40 ? 6 : 12) {
                 Text(PMLocalization.text(title))
                     .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(.secondary)
@@ -1179,7 +1201,7 @@ private struct ToggleChip: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: systemImage == nil ? 5 : 6.5) {
             if let systemImage {
                 Image(systemName: systemImage)
                     .imageScale(.small)
@@ -1187,7 +1209,7 @@ private struct ToggleChip: View {
             } else if let color {
                 Circle()
                     .fill(color)
-                    .frame(width: 7, height: 7)
+                    .frame(width: 6, height: 6)
             }
             Text(title).lineLimit(1)
             if isOn {

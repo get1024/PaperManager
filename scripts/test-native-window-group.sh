@@ -19,6 +19,7 @@ mkdir -p "$TEST_WORK_DIR/Sources" "$TASK_ROOT/.build/test-module-cache" "$REPORT
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
   "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/PaperReadingView.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
   "$TASK_ROOT"/Sources/PaperManager/Views/NativeLibrary*.swift \
   "$TASK_ROOT/Tests/NativeLibraryWindowGroupSmoke.swift" "$TEST_WORK_DIR/Sources/"

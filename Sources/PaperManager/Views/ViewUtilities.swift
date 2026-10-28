@@ -168,23 +168,298 @@ extension Color {
     }
 }
 
+/// A single control keeps list and inspector hover, keyboard and AX behavior in sync.
 struct StarRatingView: View {
     @Binding var rating: Int
+    var starSize: CGFloat = 12
+    var spacing: CGFloat = 3
+    var identity: UUID?
+    var identifier = "star-rating"
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(1...5, id: \.self) { value in
-                Button {
-                    rating = rating == value ? 0 : value
-                } label: {
-                    Image(systemName: value <= rating ? "star.fill" : "star")
-                        .foregroundStyle(value <= rating ? .yellow : .secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(value) / 5")
-            }
+        NativeStarRatingView(rating: $rating, starSize: starSize, spacing: spacing,
+                             identity: identity, identifier: identifier)
+            .frame(width: (starSize + spacing) * 5, height: max(24, starSize + 8))
+    }
+}
+
+private struct NativeStarRatingView: NSViewRepresentable {
+    @Binding var rating: Int
+    @Environment(\.isEnabled) private var isEnabled
+    let starSize: CGFloat
+    let spacing: CGFloat
+    let identity: UUID?
+    let identifier: String
+
+    func makeNSView(context: Context) -> NativeStarRatingControl { NativeStarRatingControl() }
+
+    func updateNSView(_ control: NativeStarRatingControl, context: Context) {
+        control.identifier = NSUserInterfaceItemIdentifier(identifier)
+        control.isEnabled = isEnabled
+        control.setStarGeometry(size: starSize, spacing: spacing)
+        let binding = $rating
+        control.configure(rating: rating, identity: identity) { [weak control] value in
+            binding.wrappedValue = value
+            // A durable write can fail. Reflect the committed binding immediately,
+            // even when no store notification (and hence no SwiftUI update) occurs.
+            control?.restoreRating(binding.wrappedValue)
         }
     }
+}
+
+/// Five stars, one native hit target and one AX slider. Hover is presentation
+/// state only; every editing route commits through the same callback. Keeping
+/// NSButtons out of table cells also avoids their macOS 27 sizing bridge during AX reads.
+final class NativeStarRatingControl: NSControl {
+    private(set) var rating = 0
+    private(set) var hoveredRating: Int?
+    var displayedRating: Int { hoveredRating ?? rating }
+    private var identity: UUID?
+    private var onChange: ((Int) -> Void)?
+    private var starSize: CGFloat = 12
+    var drawingVerticalOffset: CGFloat = 0 {
+        didSet { if drawingVerticalOffset != oldValue { needsDisplay = true } }
+    }
+    private var spacing: CGFloat = 3
+    private var hoverArea: NSTrackingArea?
+    private var lifecycleObservers: [NSObjectProtocol] = []
+    private var animationTimer: Timer?
+    private var fills = [CGFloat](repeating: 0, count: 5)
+    private var scales = [CGFloat](repeating: 1, count: 5)
+    var usesSelectedColors = false {
+        didSet { if usesSelectedColors != oldValue { needsDisplay = true } }
+    }
+    var usesTableStyle = false {
+        didSet { if usesTableStyle != oldValue { needsDisplay = true } }
+    }
+    override var isEnabled: Bool {
+        didSet { if !isEnabled { setHoveredRating(nil, animated: false) }; needsDisplay = true }
+    }
+    override var acceptsFirstResponder: Bool { isEnabled }
+    override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: 0, dy: 3) }
+
+    override func drawFocusRingMask() {
+        NSBezierPath(roundedRect: focusRingMaskBounds, xRadius: 4, yRadius: 4).fill()
+    }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 76, height: 25))
+        focusRingType = .exterior
+        setAccessibilityElement(true)
+        setAccessibilityRole(.slider)
+        setAccessibilityMinValue(NSNumber(value: 0))
+        setAccessibilityMaxValue(NSNumber(value: 5))
+    }
+
+    deinit {
+        animationTimer?.invalidate()
+        lifecycleObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    func setStarGeometry(size: CGFloat, spacing: CGFloat) {
+        guard starSize != size || self.spacing != spacing else { return }
+        starSize = size; self.spacing = spacing
+        needsDisplay = true
+    }
+
+    func configure(rating: Int, identity: UUID? = nil, onChange: @escaping (Int) -> Void) {
+        let changedIdentity = self.identity != identity
+        self.identity = identity
+        self.onChange = onChange
+        if changedIdentity { hoveredRating = nil }
+        let value = min(5, max(0, rating))
+        guard self.rating != value || changedIdentity else { return }
+        self.rating = value
+        updatePresentation(animated: false)
+    }
+
+    func restoreRating(_ value: Int) {
+        rating = min(5, max(0, value))
+        updatePresentation(animated: false)
+    }
+
+    private var step: CGFloat { min(starSize + spacing, bounds.width / 5) }
+    private var hoverRect: NSRect { bounds.intersection(visibleRect) }
+
+    private func value(at point: NSPoint, clipped: Bool = true) -> Int? {
+        guard isEnabled, !isHiddenOrHasHiddenAncestor, step > 0,
+              (clipped ? hoverRect : bounds).contains(point), point.x < bounds.minX + step * 5 else { return nil }
+        return min(5, max(1, Int((point.x - bounds.minX) / step) + 1))
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        hoverArea = nil
+        if !hoverRect.isEmpty {
+            let area = NSTrackingArea(rect: hoverRect,
+                options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow], owner: self, userInfo: nil)
+            addTrackingArea(area)
+            hoverArea = area
+        }
+        refreshHoverFromPointer()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        lifecycleObservers.forEach(NotificationCenter.default.removeObserver)
+        lifecycleObservers.removeAll()
+        setHoveredRating(nil, animated: false)
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window {
+            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.willCloseNotification,
+                         NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+                let appNotification = name == NSApplication.didBecomeActiveNotification || name == NSApplication.didResignActiveNotification
+                let object: AnyObject = appNotification ? NSApp : window
+                lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: object, queue: .main) { [weak self] notification in
+                    MainActor.assumeIsolated {
+                        if notification.name == NSWindow.didBecomeKeyNotification || notification.name == NSApplication.didBecomeActiveNotification {
+                            self?.refreshHoverFromPointer()
+                        } else {
+                            self?.setHoveredRating(nil, animated: false)
+                        }
+                    }
+                })
+            }
+        }
+        refreshHoverFromPointer()
+    }
+
+    private func refreshHoverFromPointer() {
+        guard let window, window.isKeyWindow, NSApp.isActive else {
+            setHoveredRating(nil, animated: false); return
+        }
+        setHoveredRating(value(at: convert(window.mouseLocationOutsideOfEventStream, from: nil)), animated: false)
+    }
+
+    override func mouseEntered(with event: NSEvent) { preview(with: event) }
+    override func mouseMoved(with event: NSEvent) { preview(with: event) }
+    override func mouseExited(with event: NSEvent) { setHoveredRating(nil) }
+
+    private func preview(with event: NSEvent) {
+        if let window, !window.isKeyWindow || !NSApp.isActive { return }
+        setHoveredRating(value(at: convert(event.locationInWindow, from: nil)))
+    }
+
+    private func setHoveredRating(_ value: Int?, animated: Bool = true) {
+        guard hoveredRating != value else { return }
+        hoveredRating = value
+        updatePresentation(animated: animated)
+    }
+
+    private func updatePresentation(animated: Bool) {
+        animationTimer?.invalidate()
+        animationTimer = nil
+        let targetFills = (0..<5).map { CGFloat($0 < displayedRating ? 1 : 0) }
+        let targetScales = (1...5).map { CGFloat($0 == hoveredRating ? 1.12 : 1) }
+        guard animated, window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            fills = targetFills; scales = targetScales; needsDisplay = true; return
+        }
+        let initialFills = fills, initialScales = scales
+        let started = ProcessInfo.processInfo.systemUptime
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let progress = CGFloat(min(1, (ProcessInfo.processInfo.systemUptime - started) / 0.10))
+                let eased = 1 - pow(1 - progress, 3)
+                self.fills = zip(initialFills, targetFills).map { $0 + ($1 - $0) * eased }
+                self.scales = zip(initialScales, targetScales).map { $0 + ($1 - $0) * eased }
+                self.needsDisplay = true
+                if progress >= 1 { timer.invalidate(); self.animationTimer = nil }
+            }
+        }
+        animationTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        needsDisplay = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let outlineColor: NSColor
+        if effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            // The table's native symbols keep a neutral tint on selected rows;
+            // inspector symbols follow the surrounding secondary text instead.
+            outlineColor = usesTableStyle
+                ? NSColor(srgbRed: 197 / 255, green: 197 / 255, blue: 197 / 255, alpha: 1)
+                : NSColor(srgbRed: 114 / 255, green: 117 / 255, blue: 123 / 255, alpha: 1)
+        } else {
+            outlineColor = usesSelectedColors ? NSColor.white : .secondaryLabelColor
+        }
+        for index in 0..<5 {
+            let center = NSPoint(x: bounds.minX + step * (CGFloat(index) + 0.5), y: bounds.midY + drawingVerticalOffset)
+            let alpha: CGFloat = isEnabled ? 1 : 0.45
+            drawStar("star", color: outlineColor, center: center, scale: scales[index], opacity: (1 - fills[index]) * alpha)
+            drawStar("star.fill", color: NSColor(Color.orange), center: center, scale: scales[index], opacity: fills[index] * alpha)
+        }
+    }
+
+    private func drawStar(_ name: String, color: NSColor, center: NSPoint, scale: CGFloat, opacity: CGFloat) {
+        guard opacity > 0 else { return }
+        // AppKit's palette renderer also composites the supplied color alpha.
+        // Keep the palette opaque and apply opacity once at the final draw.
+        let configuration = NSImage.SymbolConfiguration(paletteColors: [color.withAlphaComponent(1)])
+            .applying(.init(pointSize: starSize, weight: .regular))
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return }
+        let size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+        image.draw(in: NSRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                             width: size.width, height: size.height),
+                   from: .zero, operation: .sourceOver, fraction: opacity * color.alphaComponent, respectFlipped: true, hints: nil)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let value = value(at: convert(event.locationInWindow, from: nil), clipped: false) else { return }
+        window?.makeFirstResponder(self)
+        commit(value == rating ? 0 : value)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
+            super.keyDown(with: event); return
+        }
+        switch event.keyCode {
+        case 123, 125: commit(rating - 1, clearsHover: true)
+        case 124, 126: commit(rating + 1, clearsHover: true)
+        case 51, 117: commit(0, clearsHover: true)
+        default:
+            if let text = event.charactersIgnoringModifiers, let value = Int(text), (0...5).contains(value) { commit(value, clearsHover: true) }
+            else { super.keyDown(with: event) }
+        }
+    }
+
+    private func commit(_ value: Int, clearsHover: Bool = false) {
+        guard isEnabled else { return }
+        if clearsHover { setHoveredRating(nil, animated: false) }
+        let value = min(5, max(0, value))
+        guard value != rating else { return }
+        rating = value
+        updatePresentation(animated: false)
+        onChange?(value)
+        NSAccessibility.post(element: self, notification: .valueChanged)
+    }
+
+    override func accessibilityLabel() -> String? { PMLocalization.text("评分") }
+    override func accessibilityValue() -> Any? { NSNumber(value: rating) }
+    override func accessibilityValueDescription() -> String? { PMLocalization.format("%lld 星", rating) }
+    override func setAccessibilityValue(_ value: Any?) {
+        guard let number = value as? NSNumber else { return }
+        commit(number.intValue, clearsHover: true)
+    }
+    override func accessibilityPerformIncrement() -> Bool {
+        guard isEnabled, rating < 5 else { return false }
+        commit(rating + 1, clearsHover: true); return true
+    }
+    override func accessibilityPerformDecrement() -> Bool {
+        guard isEnabled, rating > 0 else { return false }
+        commit(rating - 1, clearsHover: true); return true
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 }
 
 struct RatingDisplay: View {

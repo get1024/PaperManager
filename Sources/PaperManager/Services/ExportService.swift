@@ -126,6 +126,9 @@ enum ExportService {
         appendRIS("EP", pageParts.end, to: &lines)
         appendRIS("DO", paper.doi, to: &lines)
         appendRIS("SN", paper.isbn, to: &lines)
+        for field in paper.customFields where isSerialField(field) {
+            appendRIS("SN", field.value, to: &lines)
+        }
         appendRIS("UR", paper.url, to: &lines)
         appendRIS("Y2", paper.urlDate ?? "", to: &lines)
         appendRIS("LA", paper.language, to: &lines)
@@ -142,12 +145,17 @@ enum ExportService {
             appendRIS("N1", paper.notes, to: &lines)
         }
         if includes(.customFields, settings: settings) {
-            for field in paper.customFields where !field.key.trimmed.isEmpty && !field.value.trimmed.isEmpty {
+            for field in paper.customFields where !isSerialField(field) && !field.key.trimmed.isEmpty && !field.value.trimmed.isEmpty {
                 appendRIS("C1", "\(field.key.trimmed): \(field.value.trimmed)", to: &lines)
             }
         }
         lines.append("ER  -")
         return lines.joined(separator: "\n")
+    }
+
+    private static func isSerialField(_ field: CustomField) -> Bool {
+        let key = field.key.trimmed.lowercased()
+        return key == "serial number" || (key == "issn" && field.value.normalizedISSN != nil)
     }
 
     private static func includes(_ field: CitationExportField, settings: AppSettings?) -> Bool {

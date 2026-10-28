@@ -38,7 +38,7 @@ struct NativeTableSmoke {
             let expansionOnly = ProcessInfo.processInfo.environment["PAPERMANAGER_TABLE_EXPANSION_ONLY"] == "1"
             let selectionOnly = ProcessInfo.processInfo.environment["PAPERMANAGER_TABLE_SELECTION_ONLY"] == "1"
             print(expansionOnly ? "Native table expansion geometry: 1 passed, 0 failed" :
-                  selectionOnly ? "Native row selection coverage: 1 passed, 0 failed" : "Native table smoke: 24 passed, 0 failed")
+                  selectionOnly ? "Native row selection coverage: 1 passed, 0 failed" : "Native table smoke: 25 passed, 0 failed")
             exit(0)
         } catch {
             print("FAIL: \(error)")
@@ -144,7 +144,8 @@ struct NativeTableSmoke {
     private static func run() throws {
         // Production uses standard defaults. Keep this test's deliberate
         // column/pane mutations reversible even when run outside its script.
-        let preferenceKeys = ["PaperManager.NativePaperColumnLayout", "PaperManager.NativePaperColumnLayout.v2", "PaperManager.NativeLibraryPaneWidths",
+        let preferenceKeys = ["PaperManager.NativePaperColumnLayout", "PaperManager.NativePaperColumnLayout.v2", "PaperManager.NativePaperColumnLayout.v3",
+                              "PaperManager.NativePaperColumnLayout.beforeLatticeFidelity", "PaperManager.NativeLibraryPaneWidths",
                               "NSTableView Columns PaperManager.NativePaperColumns",
                               "NSSplitView Subview Frames PaperManager.NativeLibrarySplit"]
         let previousPreferences = Dictionary(uniqueKeysWithValues: preferenceKeys.compactMap { key in
@@ -190,6 +191,47 @@ struct NativeTableSmoke {
                 onToggleSidebar: { state.sidebarToggleCount += 1 },
                 onPanelVisibilityChanged: { state.panelVisibilityChanges.append(($0, $1)) })
         }
+        let expectedColumns: [(String, CGFloat)] = [("title",433),("authors",115),("year",55),("source",95),
+                                                     ("rating",81),("dateAdded",95),("notes",139)]
+        let legacyWidths: [Double] = [452,123,63,103,89,103,147]
+        let legacyLayout: [[String: Any]] = expectedColumns.enumerated().map { index, column in
+            ["id": column.0, "width": legacyWidths[index], "hidden": false]
+        }
+        func migratedOutline(_ layout: [[String: Any]]) throws -> NSOutlineView {
+            UserDefaults.standard.removeObject(forKey: "PaperManager.NativePaperColumnLayout.v3")
+            UserDefaults.standard.removeObject(forKey: "PaperManager.NativePaperColumnLayout.beforeLatticeFidelity")
+            UserDefaults.standard.set(layout, forKey: "PaperManager.NativePaperColumnLayout.v2")
+            let migrationController = NativePaperTableController()
+            migrationController.configure(configuration())
+            guard let table = descendants(migrationController.view).compactMap({ $0 as? NSOutlineView }).first else {
+                throw Failure(description: "The migrated table is missing its outline")
+            }
+            return table
+        }
+        let migratedDefaults = try migratedOutline(legacyLayout)
+        try expect(zip(migratedDefaults.tableColumns, expectedColumns).allSatisfy { abs($0.0.width - $0.1.1) < 0.5 },
+                   "An untouched v2 shipped layout failed to migrate to the measured defaults")
+        var customLegacy = legacyLayout
+        customLegacy[0]["width"] = 480.0
+        customLegacy[3]["hidden"] = true
+        customLegacy.swapAt(1, 6)
+        let migratedCustom = try migratedOutline(customLegacy)
+        try expect(zip(migratedCustom.tableColumns, expectedColumns).allSatisfy { abs($0.0.width - $0.1.1) < 0.5 },
+                   "The prior v2 layout prevented the requested one-time reference layout migration")
+        guard let archivedLayout = UserDefaults.standard.array(forKey: "PaperManager.NativePaperColumnLayout.beforeLatticeFidelity") as? [[String: Any]] else {
+            throw Failure(description: "The previous column layout was not archived before migration")
+        }
+        try expect(archivedLayout.map { $0["id"] as? String } == customLegacy.map { $0["id"] as? String } &&
+                   (archivedLayout[0]["width"] as? NSNumber)?.doubleValue == 480 &&
+                   archivedLayout[3]["hidden"] as? Bool == true,
+                   "The archived column layout lost custom widths, order or hidden columns")
+        try expect(UserDefaults.standard.array(forKey: "PaperManager.NativePaperColumnLayout.v3") != nil,
+                   "Migrated column preferences were not saved under v3")
+        for key in ["PaperManager.NativePaperColumnLayout.v2", "PaperManager.NativePaperColumnLayout.v3", "PaperManager.NativePaperColumnLayout.beforeLatticeFidelity"] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        print("PASS: Column layout adopts the reference once and archives the previous custom layout")
+
         let controller = NativePaperTableController()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 600),
                               styleMask: [.titled], backing: .buffered, defer: false)
@@ -201,13 +243,11 @@ struct NativeTableSmoke {
         guard let outline = descendants(controller.view).compactMap({ $0 as? NSOutlineView }).first else {
             throw Failure(description: "The native controller did not create its outline")
         }
-        let expectedColumns: [(String, CGFloat)] = [("title",452),("authors",123),("year",63),("source",103),
-                                                     ("rating",89),("dateAdded",103),("notes",147)]
         try expect(!outline.autosaveTableColumns && outline.style == .inset,
                    "Legacy AppKit column autosave or full-width row styling was re-enabled")
         try expect(outline.tableColumns.map { $0.identifier.rawValue } == expectedColumns.map { $0.0 } &&
                    zip(outline.tableColumns, expectedColumns).allSatisfy { abs($0.0.width - $0.1.1) < 0.5 },
-                   "A table without a v2 layout failed to apply the measured reference defaults")
+                   "A table without a v3 layout failed to apply the measured reference defaults")
         print("PASS: New table ignores legacy autosave and uses inset rows/reference column widths")
         try verifyAttachmentExpansionGeometry(store: store, root: root, controller: controller,
             outline: outline, window: window, configure: { controller.configure(configuration()) })
@@ -395,8 +435,8 @@ struct NativeTableSmoke {
 
         let selectedCell = try textCell(column: "authors", row: 0)
         selectedCell.backgroundStyle = .emphasized
-        try expect(selectedCell.textField?.textColor == .selectedControlTextColor,
-                   "Selected secondary metadata did not use the native selected text color")
+        try expect(selectedCell.textField?.textColor == NSColor.white,
+                   "Selected metadata must be white")
         selectedCell.backgroundStyle = .normal
         try expect(selectedCell.textField?.textColor == .secondaryLabelColor,
                    "Deselecting metadata failed to restore its secondary text color")
@@ -665,7 +705,22 @@ struct NativeTableSmoke {
         var attachedConfiguration = configuration(); attachedConfiguration.selectionCommands = commands
         controller.configure(attachedConfiguration)
         outline.expandItem(outline.item(atRow: 0))
+        outline.selectRowIndexes([3], byExtendingSelection: false)
+        outline.selectRowIndexes([1], byExtendingSelection: true)
+        guard let nativeOutline = outline as? LibraryOutlineView,
+              let mixedMenu = nativeOutline.menuProvider?() else {
+            throw Failure(description: "The selected table did not expose its real context menu")
+        }
+        try expect(mixedMenu.items.last?.title == PMLocalization.text("删除记录"),
+                   "Mixed paper/attachment selection advertised link removal even though its action deletes paper records")
+        let beforeMixedDelete = state.deleteCalls
+        try expect(commands.perform(.delete) && state.deleteCalls == beforeMixedDelete + 1 &&
+                   store.paper(with: selected.id)?.attachments.count == 2,
+                   "Mixed selection's advertised paper-delete command did not retain its existing callback")
+        print("PASS: Mixed paper/attachment selection labels its destructive context action as Delete Records")
         outline.selectRowIndexes([2], byExtendingSelection: false)
+        try expect(nativeOutline.menuProvider?()?.items.last?.title == PMLocalization.text("移除附件链接"),
+                   "An attachment-only selection no longer advertised safe link removal")
         let beforeDeleteCalls = state.deleteCalls
         try expect(commands.perform(.delete), "Application menu command did not reach the native selection")
         try expect(store.paper(with: selected.id)?.attachments.map(\.id) == [primary.id] && state.deleteCalls == beforeDeleteCalls,

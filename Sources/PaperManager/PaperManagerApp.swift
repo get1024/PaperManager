@@ -26,7 +26,7 @@ struct PaperManagerApp: App {
                 .environmentObject(store)
                 .environmentObject(localAPI)
                 .environment(\.locale, uiLocale)
-                .frame(minWidth: 1080, minHeight: 680)
+                .frame(minWidth: 1200, minHeight: 560)
         }
         .defaultSize(width: 1420, height: 860)
         .commands {
@@ -59,6 +59,10 @@ struct PaperManagerApp: App {
 final class PaperManagerAppDelegate: NSObject, NSApplicationDelegate {
     private var terminationTask: Task<Void, Never>?
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        LibraryStore.refreshLiveAttachmentAvailability()
+    }
+
     func applicationDidResignActive(_ notification: Notification) {
         PaperDraftSession.flushAll()
     }
@@ -89,7 +93,7 @@ final class PaperManagerAppDelegate: NSObject, NSApplicationDelegate {
     private func flushDraftsForTermination(_ sender: NSApplication) -> Bool {
         // Finish a field editor before flushing the debounced inspector drafts.
         for window in sender.windows { window.makeFirstResponder(nil) }
-        guard PaperDraftSession.flushAll() else {
+        guard PaperDraftSession.flushAll(), ReadingSessionService.pauseAll() else {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = PMLocalization.text("草稿尚未保存")

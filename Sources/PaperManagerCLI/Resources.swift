@@ -11,7 +11,7 @@ enum ConnectorResources {
         return URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath().path
     }
     static let help = """
-    PaperManagerCLI 1.0.0 — native loopback connector
+    PaperManagerCLI 1.1.0 — native loopback connector
 
     PaperManagerCLI [--base-url http://127.0.0.1:PORT] [--read-only|--allow-write] COMMAND [OPTIONS]
 

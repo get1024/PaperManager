@@ -6,7 +6,7 @@ struct PaperManagerCLI {
     static func main() async {
         let raw = Array(CommandLine.arguments.dropFirst())
         if raw.contains("--help") || raw == ["help"] { print(ConnectorResources.help); return }
-        if raw == ["--version"] { print("1.0.0"); return }
+        if raw == ["--version"] { print("1.1.0"); return }
         do {
             let arguments = try CLIArguments(raw)
             let configuration = try ConnectorConfiguration(arguments: arguments)

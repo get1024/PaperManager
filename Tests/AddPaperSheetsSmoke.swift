@@ -79,14 +79,20 @@ struct AddPaperSheetsSmoke {
         var second = Paper(); second.title = "Deep learning"; second.authors = ["LeCun, Yann", "Bengio, Yoshua", "Hinton, Geoffrey"]
         var plan = ImportService.prepare(papers: [first, second], store: store)
         measure(ImportPreviewView(plan: plan, targetFilter: nil, sourceKind: "BibTeX"), name: "importPreview", width: 500, height: 400)
-        plan.candidates[0].duplicateID = UUID()
+        plan = ImportService.prepare(papers: [first, first], store: store)
+        if plan.candidates[1].batchDuplicateID != plan.candidates[0].id {
+            failures.append("Same-import duplicate options were missing from the rendered preview plan")
+        }
+        measure(ImportPreviewView(plan: plan, targetFilter: nil, sourceKind: "BibTeX"), name: "batchDuplicatePreview", width: 500, height: 400)
+        _ = try! store.addPaperDurably(first)
+        plan = ImportService.prepare(papers: [first, second], store: store)
         measure(ImportPreviewView(plan: plan, targetFilter: nil, sourceKind: "BibTeX"), name: "duplicatePreview", width: 500, height: 400)
         if let path = ProcessInfo.processInfo.environment["PAPERMANAGER_ADD_SHEETS_REPORT"] {
             let report: [String: Any] = ["ok": failures.isEmpty, "failures": failures, "sizes": sizes]
             try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: path))
         }
         failures.forEach { print("FAIL: \($0)") }
-        print("Add paper sheets: \(failures.isEmpty ? "5 layouts + lookup lifecycle passed" : "\(failures.count) failures")")
+        print("Add paper sheets: \(failures.isEmpty ? "6 layouts + lookup lifecycle passed" : "\(failures.count) failures")")
         windows.forEach { $0.close() }
         exit(failures.isEmpty ? 0 : 1)
     }

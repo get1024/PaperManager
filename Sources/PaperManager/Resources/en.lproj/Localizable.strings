@@ -371,6 +371,7 @@
 "文件库位于 Zotero 数据文件夹内。请更换文件库，或选择不导入文件。" = "The File Library is inside the Zotero data folder. Choose another File Library or import without files.";
 "文件库已授权，现有文件保留原位置。" = "File Library authorized. Existing files remain in place.";
 "文库中已存在" = "Already in Library";
+"本批次重复" = "Duplicate in This Import";
 "文献元数据将在此处显示。" = "Paper metadata appears here.";
 "更改文献类型" = "Change Paper Type";
 "替换" = "Replace";
@@ -854,3 +855,32 @@
 "删除所选项目" = "Delete Selected Items";
 "端口必须是 1–65535 之间的整数。" = "Port must be an integer between 1 and 65535.";
 "请先完成或取消当前导入。" = "Finish or cancel the current import before starting another.";
+"不支持文库版本 %d。已停止写入，请使用支持此版本的 PaperManager 打开。" = "Library version %d is not supported. Writing has been stopped. Open this library with a compatible version of PaperManager.";
+
+"阅读" = "Reading";
+
+"论文阅读时间" = "Reading time";
+
+"阅读进度" = "Reading progress";
+
+"开始计时" = "Start timer";
+
+"暂停计时" = "Pause timer";
+
+"正在计时：%@" = "Timing: %@";
+
+"标记已读至当前预览页" = "Mark read through preview page";
+
+"手动计时，可在外部阅读器阅读；结束后请暂停。进度由你确认，预览翻页不计入。休眠时自动暂停。" = "Manual timer works with external readers. Pause when finished. Confirm progress yourself; preview navigation does not count. Pauses on sleep.";
+
+"重试保存" = "Retry save";
+
+"PDF 页面预览" = "PDF page preview";
+
+"上一页" = "Previous page";
+
+"下一页" = "Next page";
+
+"无法预览 PDF（文件缺失、损坏或已加密）" = "PDF unavailable (missing, damaged or encrypted)";
+
+"无法读取 PDF 页面" = "Unable to read PDF page";

@@ -40,7 +40,7 @@ PaperManager 将收集、整理、检索与引用放进一个原生 macOS 工作
 | **整理资料** | 使用最多三级文集、彩色标签和评分组织文库；管理 PDF 与附件，按规则整理或重命名文件。 |
 | **快速检索** | 搜索标题、作者、标识符、摘要、备注和自定义字段；排序、多选、调整列宽，独立收起两侧面板。 |
 | **完善记录** | 编辑 15 种文献类型，维护引用键、自定义字段、摘要和备注；批量刷新元数据并查看进度。 |
-| **阅读与引用** | 用系统或指定阅读器打开 PDF，也可 Quick Look 预览；提取 PDF 标注，导出 BibTeX、RIS 或模板化 Markdown。 |
+| **阅读与引用** | 在元数据右侧逐页预览 PDF；使用外部阅读器，手动计时并确认阅读进度；提取标注、导出引用。 |
 | **迁移与连接** | 使用 `.papermanager` 可移植备份，导入 `.lattice` 或 Zotero 文库；通过可选本地 API、CLI 和 MCP 连接其他工具。 |
 
 <a id="preview"></a>
@@ -61,6 +61,8 @@ PaperManager 将收集、整理、检索与引用放进一个原生 macOS 工作
 
 <a id="quick-start"></a>
 ## 快速开始
+
+从 [GitHub Releases](https://github.com/get1024/PaperManager/releases/latest) 下载最新 DMG，将应用拖入 Applications。发行包使用临时签名，尚未公证。
 
 **运行要求：macOS 14 或更新版本。** 从源码构建需要可用的 Xcode 或 Command Line Tools，以及与源码 API 匹配的 macOS SDK。
 
@@ -144,18 +146,58 @@ Tests/               隔离文库、原生 UI 与连接器回归
 scripts/             构建、启动、测试与维护入口
 ```
 
-重构按小批次进行：先记录现有行为与副作用，再调整职责，最后比较结果并复审。公共入口、配置默认值、文件格式和用户可见行为都属于兼容性范围。
+### 架构与参与开发
+
+应用当前采用 **按职责分层的单体架构**：App 与 CLI 是两个独立编译目标，App 内部按模型、服务、界面组织。目录划分提供清晰入口，但尚未由独立 Swift Package 强制隔离依赖；新增功能应继续收窄边界。
+
+```mermaid
+flowchart TD
+    UI[AppKit 列表 / SwiftUI 检查器] --> Draft[PaperDraftSession 草稿合并]
+    UI --> Reading[ReadingSessionService 阅读会话]
+    UI --> Preview[PDFPreviewService 缩略图]
+    Draft --> Store[LibraryStore 事务与状态]
+    Reading --> Store
+    Store --> Query[LibraryQuery 查询与索引]
+    Store --> IO[导入 / 备份 / 文件库 / 元数据服务]
+    Store --> JSON[本地 JSON 原子写入]
+    Preview --> PDF[PDFKit / 附件访问]
+    CLI[CLI / MCP / 浏览器连接器] --> API[本地 API]
+    API --> Store
+```
+
+| 修改需求 | 从这里开始 | 边界与约定 |
+|---|---|---|
+| 字段与兼容性 | `Models/LibraryModels.swift`、`ReadingRecord.swift` | 新增可选字段兼容旧文库；模型不调用界面或网络。 |
+| 查询与排序 | `Services/LibraryQuery.swift` | 数据计算不直接更新界面或写盘。 |
+| 持久化与操作协调 | `Services/LibraryStore.swift` | 先原子写盘，再发布状态；失败保留可恢复数据。 |
+| PDF 缩略图 | `Services/PDFPreviewService.swift`、`Views/PaperReadingView.swift` | 后台渲染单页、限制图像大小；取消的请求不能回填到新条目。 |
+| 阅读时间与进度 | `ReadingSessionService.swift`、`ReadingRecord.swift` | 每个文库共用一个显式计时会话；从最新记录合并，避免覆盖草稿。 |
+| 列表与侧栏 | `Views/NativeLibrary*.swift` | AppKit 管理复用、选区、键盘与辅助功能；回调交给服务执行。 |
+| 元数据编辑 | `Views/PaperDetailView.swift`、`InspectorInlineEditor.swift` | 草稿和提交分开；延迟编辑只合并用户修改的字段。 |
+| 外部工具 | `Sources/PaperManagerCLI`、`Services/LocalAPIServer.swift` | CLI 通过 HTTP 协议访问应用，不直接改写文库 JSON。 |
+
+2026-10-28 架构审核：列表、查询、文件服务已具备独立职责；本版将阅读模型、计时、PDF 渲染与阅读控件分别放入四个文件。主要耦合仍集中在 `LibraryStore`（约 1,300 行）、`PaperDetailView` 和 `SettingsView`（各约 1,300 行）；若继续增加功能，应按用例拆出协调器、检查器小节和设置页面，并为文件与网络边界注入接口。现有部分测试手动枚举源文件，也是后续统一测试目标时应消除的维护成本。这里不会把目录分层宣称为已经完成的包级模块化。
+
+第一次贡献可以按以下步骤完成：
+
+1. 在对应目录找到入口，先运行该功能的 `scripts/test-*.sh`，确认已有行为。
+2. 将业务规则写入模型或服务，界面只保存短期交互状态并调用服务；避免新增全局可变状态和直接 JSON 写入。
+3. 新增源文件同步登记 Xcode 工程及相关测试脚本，运行 `python3 scripts/check-project-membership.py`。
+4. 用临时文库验证改动，执行 `scripts/test.sh core`；涉及界面时加跑 `ui` 与 `ax`。不要用个人文库做写入测试。
+5. 提交小而完整的改动，说明用户行为、兼容性、测试结果和未验证范围。
+
+### 阅读记录的使用范围
+
+标题、作者和引用键右侧显示 PDF 缩略图，下方是原生上一页／下一页按钮。预览只渲染图片，不提供内部 PDF 阅读器；缺失、损坏或加密文件显示不可用状态。
+
+点击「开始计时」后可以切换到任何外部阅读器，结束后点击「暂停计时」。同一文库同时只计时一篇；切换列表选择不会改变正在计时的论文。每 5 秒保存一次，暂停和正常退出补存尾段，电脑休眠时暂停；异常退出可能损失最后不足 5 秒。外部阅读器关闭、切换文档或用户离开不会自动停止这个手动会话。
+
+进度通过滑块确认，也可点击「标记已读至当前预览页」；百分比表示用户确认的阅读位置，不是逐页覆盖率或理解程度。仅打开附件或翻预览不会自动增加进度。记录保存在文库和可移植备份中；不从外部阅读器猜测页码。
+
+实现研究见 [Zotero Style 阅读统计对照](docs/READING.md)。
 
 [开发说明](docs/DEVELOPMENT.md) · [测试说明](docs/TESTING.md) · [重构约定与本轮验证](docs/REFACTORING.md)
 
 ## 当前状态
 
 核心文献管理、导入导出、备份和本地集成已经实现。浏览器连接器仍以源码包交付；Safari 签名发行和 Shortcuts 系统注册尚未完成验证。
-
-本项目参考 Lattice 3.0 的发布包与实际行为独立实现。界面仍有少数字形、材质和未测状态差异；具体测试覆盖见[验证记录](docs/CLEANUP.md)。
-
-应用与本页使用正式图标 **B「折页」米灰版**：以温暖的米灰背景衬托象牙白纸面和珊瑚红内折面。[正式图标资源与生成方式](App/IconSource/README.md) · [最初四个方向与设计研究](docs/design/icon-exploration/README.md)。
-
----
-
-README 的结构与图文呈现参考了 [IINA](https://github.com/iina/iina)、[Stats](https://github.com/exelban/stats) 和 [Ice](https://github.com/jordanbaird/Ice)。本页界面图片均由 PaperManager 自身组件生成。

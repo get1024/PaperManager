@@ -57,7 +57,6 @@ enum RISParser {
         paper.issue = first(record, ["IS"]) ?? ""
         paper.pages = pages(start: first(record, ["SP"]), end: first(record, ["EP"]))
         paper.doi = first(record, ["DO"]) ?? ""
-        paper.isbn = first(record, ["SN"]) ?? ""
         paper.url = first(record, ["UR", "L1"]) ?? ""
         paper.urlDate = first(record, ["Y2"])
         paper.language = first(record, ["LA"]) ?? ""
@@ -71,6 +70,18 @@ enum RISParser {
             let content = String(value[separator.upperBound...]).trimmed
             guard !key.isEmpty && !content.isEmpty else { return nil }
             return CustomField(key: key, value: content)
+        }
+        // SN identifies either a book (ISBN) or a serial publication (ISSN).
+        // A journal's ISSN is container metadata, never an article identity.
+        for serial in record["SN"] ?? [] where !serial.trimmed.isEmpty {
+            if serial.normalizedISBN != nil {
+                if paper.isbn.isEmpty { paper.isbn = serial }
+            } else {
+                let key = serial.normalizedISSN == nil ? "Serial number" : "ISSN"
+                if !paper.customFields.contains(where: { $0.key.caseInsensitiveCompare(key) == .orderedSame && $0.value == serial }) {
+                    paper.customFields.append(CustomField(key: key, value: serial))
+                }
+            }
         }
         return paper
     }

@@ -32,10 +32,15 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
     private var lastAppliedSelection: Set<UUID> = []
     private var updating = false
     private let paperDragType = NSPasteboard.PasteboardType("com.papermanager.paper-ids")
-    private static let columnLayoutDefaultsKey = "PaperManager.NativePaperColumnLayout.v2"
+    private static let columnLayoutDefaultsKey = "PaperManager.NativePaperColumnLayout.v3"
+    private static let previousColumnLayoutDefaultsKey = "PaperManager.NativePaperColumnLayout.v2"
+    private static let previousColumnLayoutBackupKey = "PaperManager.NativePaperColumnLayout.beforeLatticeFidelity"
     private static let defaultColumns: [(id: String, title: String, width: CGFloat)] = [
-        ("title", "标题", 452), ("authors", "作者", 123), ("year", "年份", 63),
-        ("source", "来源", 103), ("rating", "评分", 89), ("dateAdded", "添加日期", 103), ("notes", "备注", 147)
+        // AppKit adds the 8pt intercell spacing to each column's rendered
+        // stride. Keep that native text inset while matching the reference's
+        // measured 123/63/103/89/103pt metadata column strides.
+        ("title", "标题", 433), ("authors", "作者", 115), ("year", "年份", 55),
+        ("source", "来源", 95), ("rating", "评分", 81), ("dateAdded", "添加日期", 95), ("notes", "备注", 139)
     ]
     private var restoringColumnLayout = false
     private let dateFormatter: DateFormatter = {
@@ -173,15 +178,28 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
             for node in nodes where expandedPaperIDs.contains(node.paper.id) { outline.expandItem(node) }
         } else {
             var changedRows = IndexSet()
+            let ratingColumn = outline.column(withIdentifier: NSUserInterfaceItemIdentifier("rating"))
             for (node, paper) in zip(nodes, configuration.papers) where node.paper != paper {
+                var previous = node.paper
+                previous.rating = paper.rating
+                previous.dateModified = paper.dateModified
+                let ratingOnly = previous == paper
                 node.paper = paper
                 let row = outline.row(forItem: node)
-                if row >= 0 { changedRows.insert(row) }
+                if ratingOnly {
+                    // Keep the live control during discrete edits. Reloading its
+                    // row replaces the first responder and interrupts hover and
+                    // consecutive keyboard changes. Offscreen cells read node.paper.
+                    if row >= 0, ratingColumn >= 0,
+                       let cell = outline.view(atColumn: ratingColumn, row: row, makeIfNecessary: false) as? NativeRatingCell {
+                        cell.ratingControl.restoreRating(paper.rating)
+                    }
+                } else if row >= 0 { changedRows.insert(row) }
                 for (child, attachment) in zip(node.children, paper.attachments) {
                     child.paper = paper
                     child.attachment = attachment
                     let childRow = outline.row(forItem: child)
-                    if childRow >= 0 { changedRows.insert(childRow) }
+                    if !ratingOnly, childRow >= 0 { changedRows.insert(childRow) }
                 }
             }
             if !changedRows.isEmpty {
@@ -226,8 +244,14 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
             let cell = NativeTextCell.reusable(in: outlineView, owner: self)
             cell.configure(symbol: id == "title" ? (attachment.kind == .pdf ? "doc.richtext" : "paperclip") : "",
                            text: id == "title" ? attachment.displayName : "")
-            cell.contentLeadingInset = id == "title" ? 5 : 0
-            cell.setTextStyle(font: .systemFont(ofSize: 13), color: .secondaryLabelColor)
+            cell.contentLeadingInset = id == "title" ? 5 : 1
+            cell.textVerticalOffset = id == "title" ? 0.5 : -0.5
+            cell.symbolHorizontalOffset = 1
+            cell.symbolVerticalOffset = 1.5
+            cell.symbolPointSize = 12
+            cell.setTextStyle(font: .systemFont(ofSize: 13), color: .secondaryLabelColor,
+                              symbolColor: .tertiaryLabelColor,
+                              selectedTextColor: .white)
             return cell
         }
         let text: String
@@ -238,10 +262,9 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
         case "source": text = paper.sourceDisplay.nilIfBlank ?? "—"
         case "rating":
             let cell = NativeRatingCell.reusable(in: outlineView, owner: self)
-            cell.configure(rating: paper.rating, onChange: { [weak self, weak cell] value in
-                guard let store = self?.configuration?.store, var updated = store.paper(with: paper.id) else { return }
-                updated.rating = value
-                if !store.updatePaper(updated) {
+            cell.configure(rating: paper.rating, identity: paper.id, onChange: { [weak self, weak cell] value in
+                guard let store = self?.configuration?.store else { return }
+                if !store.updateRating(value, for: paper.id) {
                     cell?.ratingControl.restoreRating(store.paper(with: paper.id)?.rating ?? paper.rating)
                 }
             })
@@ -252,9 +275,16 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
         }
         let cell = NativeTextCell.reusable(in: outlineView, owner: self)
         cell.configure(symbol: id == "title" ? "doc.text" : "", text: text)
-        cell.contentLeadingInset = id == "title" ? 5 : 0
-        cell.setTextStyle(font: .systemFont(ofSize: id == "title" ? 13 : 12.5, weight: .regular),
-                          color: id == "title" ? .labelColor : .secondaryLabelColor)
+        cell.contentLeadingInset = id == "title" ? 5 : 1
+        cell.textVerticalOffset = id == "title" ? 0.5 : -0.5
+        cell.symbolHorizontalOffset = 1
+        cell.symbolVerticalOffset = 1.5
+        cell.symbolPointSize = 12
+        let font: NSFont = id == "title" ? .systemFont(ofSize: 13) :
+            (["year", "dateAdded"].contains(id) ? .monospacedDigitSystemFont(ofSize: 11, weight: .regular) : .systemFont(ofSize: 11))
+        cell.setTextStyle(font: font, color: id == "title" ? .labelColor : .secondaryLabelColor,
+                          symbolColor: .tertiaryLabelColor,
+                          selectedTextColor: .white)
         return cell
     }
     private func authorSummary(_ authors: [String]) -> String {
@@ -394,6 +424,8 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
     private func rowMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        let selected = outline.selectedRowIndexes.compactMap { outline.item(atRow: $0) as? NativePaperNode }
+        let removesOnlyAttachmentLinks = !selected.isEmpty && selected.allSatisfy { $0.attachment != nil }
         func add(_ title: String, _ action: Selector) {
             let item = NSMenuItem(title: PMLocalization.text(title), action: action, keyEquivalent: "")
             item.target = self
@@ -406,7 +438,7 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
         menu.addItem(.separator()); add("刷新元数据", #selector(refreshMetadata))
         menu.addItem(.separator()); add("导出 BibTeX…", #selector(exportBibTeX)); add("导出 RIS…", #selector(exportRIS)); add("详细导出…", #selector(exportDetailed))
         add("拷贝 BibTeX", #selector(copyBibTeX)); add("拷贝 RIS", #selector(copyRIS))
-        menu.addItem(.separator()); add(selectedAttachment() == nil ? "删除记录" : "移除附件链接", #selector(deleteSelected))
+        menu.addItem(.separator()); add(removesOnlyAttachmentLinks ? "移除附件链接" : "删除记录", #selector(deleteSelected))
         return menu
     }
     func outlineViewColumnDidMove(_ notification: Notification) { persistColumnLayout() }
@@ -414,6 +446,13 @@ final class NativePaperTableController: NSViewController, NSOutlineViewDataSourc
 
     private func restoreColumnLayout() {
         guard let saved = UserDefaults.standard.array(forKey: Self.columnLayoutDefaultsKey) as? [[String: Any]] else {
+            // Adopt the requested reference layout once, retaining a reversible
+            // copy of the previous layout. Later user edits live under v3 and
+            // restore normally without being reset on the next launch.
+            if UserDefaults.standard.object(forKey: Self.previousColumnLayoutBackupKey) == nil,
+               let previous = UserDefaults.standard.array(forKey: Self.previousColumnLayoutDefaultsKey) {
+                UserDefaults.standard.set(previous, forKey: Self.previousColumnLayoutBackupKey)
+            }
             resetColumns()
             return
         }

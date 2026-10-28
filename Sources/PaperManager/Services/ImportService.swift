@@ -28,8 +28,11 @@ struct ImportCandidate: Identifiable {
     var paper: Paper
     var sourceURL: URL?
     var duplicateID: UUID?
+    /// A preceding selected preview candidate, rather than a saved library item.
+    var batchDuplicateID: UUID?
     var isSelected = true
     var duplicateAction: ImportDuplicateAction = .skip
+    var hasDuplicate: Bool { duplicateID != nil || batchDuplicateID != nil }
 }
 
 // Keep the user's folder grant alive between preparation and confirmation.
@@ -86,21 +89,68 @@ enum ImportService {
                 }
                 for paper in papers {
                     plan.candidates.append(ImportCandidate(
-                        paper: paper, sourceURL: url.isPDF ? url : nil,
-                        duplicateID: store.duplicatePaperID(for: paper)
+                        paper: paper, sourceURL: url.isPDF ? url : nil
                     ))
                 }
             } catch {
                 plan.failures.append("\(url.lastPathComponent)：\(error.localizedDescription)")
             }
         }
+        refreshDuplicateMatches(in: &plan, store: store)
         return plan
     }
 
     static func prepare(papers: [Paper], store: LibraryStore) -> ImportPlan {
-        ImportPlan(candidates: papers.map {
-            ImportCandidate(paper: $0, duplicateID: store.duplicatePaperID(for: $0))
+        var plan = ImportPlan(candidates: papers.map {
+            ImportCandidate(paper: $0)
         })
+        refreshDuplicateMatches(in: &plan, store: store)
+        return plan
+    }
+
+    /// Keep the preview aligned with commit's identity and bibliography checks.
+    /// Only selected predecessors can be inserted before the current candidate.
+    static func refreshDuplicateMatches(in plan: inout ImportPlan, store: LibraryStore) {
+        var projected = store.snapshot.papers
+        let savedIDs = Set(projected.map(\.id))
+        var batchOrigins: [UUID: UUID] = [:]
+        for index in plan.candidates.indices {
+            let paper = plan.candidates[index].paper
+            let match = projected.first(where: { $0.id == paper.id })?.id
+                ?? LibraryStore.duplicatePaperID(for: paper, among: projected)
+            plan.candidates[index].duplicateID = match.flatMap { savedIDs.contains($0) ? $0 : nil }
+            plan.candidates[index].batchDuplicateID = match.flatMap { batchOrigins[$0] }
+            guard plan.candidates[index].isSelected else { continue }
+            if let match, let projectedIndex = projected.firstIndex(where: { $0.id == match }) {
+                // A skipped candidate never exists in the resulting library.
+                // Replacement changes the identity fields used by later rows.
+                guard plan.candidates[index].duplicateAction == .replace else { continue }
+                projected[projectedIndex] = replacementPaper(paper, replacing: projected[projectedIndex])
+                if !savedIDs.contains(match) { batchOrigins[match] = plan.candidates[index].id }
+            } else {
+                projected.append(paper)
+                batchOrigins[paper.id] = plan.candidates[index].id
+            }
+        }
+    }
+
+    private static func replacementPaper(_ incoming: Paper, replacing existing: Paper) -> Paper {
+        var importedDraft = incoming
+        importedDraft.id = existing.id
+        var emptyBaseline = Paper()
+        emptyBaseline.id = existing.id
+        var replacement = importedDraft.applyingEdits(to: existing, from: emptyBaseline)
+        replacement.id = existing.id
+        replacement.paperType = incoming.paperType
+        replacement.dateAdded = existing.dateAdded
+        replacement.lastOpenedAt = existing.lastOpenedAt
+        replacement.attachments = existing.attachments
+        replacement.annotations = existing.annotations
+        replacement.rating = existing.rating
+        replacement.notes = existing.notes
+        replacement.collectionIDs = Array(Set(existing.collectionIDs + incoming.collectionIDs))
+        replacement.tagIDs = Array(Set(existing.tagIDs + incoming.tagIDs))
+        return replacement
     }
 
     static func commit(_ plan: ImportPlan, into store: LibraryStore, targetFilter: LibraryFilter?) async -> ImportSummary {
@@ -138,22 +188,7 @@ enum ImportService {
                 }
                 let id: UUID
                 if let existing = duplicate {
-                    var importedDraft = incoming
-                    importedDraft.id = existing.id
-                    var emptyBaseline = Paper()
-                    emptyBaseline.id = existing.id
-                    var replacement = importedDraft.applyingEdits(to: existing, from: emptyBaseline)
-                    replacement.id = existing.id
-                    replacement.paperType = incoming.paperType
-                    replacement.dateAdded = existing.dateAdded
-                    replacement.lastOpenedAt = existing.lastOpenedAt
-                    replacement.attachments = existing.attachments
-                    replacement.annotations = existing.annotations
-                    replacement.rating = existing.rating
-                    replacement.notes = existing.notes
-                    replacement.collectionIDs = Array(Set(existing.collectionIDs + incoming.collectionIDs))
-                    replacement.tagIDs = Array(Set(existing.tagIDs + incoming.tagIDs))
-                    try store.updatePaperDurably(replacement, targetFilter: targetFilter)
+                    try store.updatePaperDurably(replacementPaper(incoming, replacing: existing), targetFilter: targetFilter)
                     id = existing.id
                 } else {
                     id = try store.addPaperDurably(incoming, targetFilter: targetFilter)

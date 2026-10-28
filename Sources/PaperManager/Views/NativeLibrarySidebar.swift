@@ -94,6 +94,26 @@ private final class NativeSidebarNode: NSObject {
     }
 }
 
+/// Tag tints are literal library colors. The default image view participates
+/// in vibrancy and makes them brighter than stored; accent icons retain it.
+private final class NativeSidebarSymbolImageView: NSImageView {
+    var rendersLiteralTint = false {
+        didSet { if rendersLiteralTint != oldValue { needsDisplay = true } }
+    }
+    override var allowsVibrancy: Bool { !rendersLiteralTint }
+
+    override var frame: NSRect {
+        get { super.frame }
+        set {
+            // SF Symbols include alignment margins. A 16pt shared cell slot
+            // scales the 15pt symbols down; retain its center in a 19pt slot.
+            let side: CGFloat = 19
+            super.frame = NSRect(x: newValue.midX - side / 2, y: newValue.midY - side / 2,
+                                 width: side, height: side)
+        }
+    }
+}
+
 final class NativeSidebarController: NSViewController, NSOutlineViewDataSource,
     NSOutlineViewDelegate, NSSearchFieldDelegate {
     private let outline = LibraryOutlineView()
@@ -154,11 +174,11 @@ final class NativeSidebarController: NSViewController, NSOutlineViewDataSource,
         NSLayoutConstraint.activate([
             search.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             search.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
-            search.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            search.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 11.5),
             search.heightAnchor.constraint(equalToConstant: 25),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 12),
+            scroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 11.5),
             scroll.bottomAnchor.constraint(equalTo: taskFooter.topAnchor),
             taskFooter.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             taskFooter.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
@@ -252,18 +272,35 @@ final class NativeSidebarController: NSViewController, NSOutlineViewDataSource,
         (item as? NativeSidebarNode)?.isSection ?? false
     }
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
-        (item as? NativeSidebarNode)?.isSection == true ? 18 : 32
+        // Source-list group spacing is cumulative. One missing point in each
+        // header moves the collection and tag rows farther above their peers.
+        (item as? NativeSidebarNode)?.isSection == true ? 19 : 32
     }
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let node = item as? NativeSidebarNode else { return nil }
         let cell = NativeTextCell.reusable(in: outlineView, owner: self)
+        if !(cell.imageView is NativeSidebarSymbolImageView) {
+            cell.imageView?.removeFromSuperview()
+            let image = NativeSidebarSymbolImageView()
+            image.setAccessibilityElement(false)
+            cell.imageView = image
+            cell.addSubview(image)
+        }
         cell.configure(symbol: node.symbol, text: node.title, trailing: node.count > 0 ? String(node.count) : "")
         cell.contentLeadingInset = node.isSection ? 2 : 5
-        cell.imageTextOffset = 21
+        let isTag: Bool
+        if case .tag = node.filter { isTag = true } else { isTag = false }
+        (cell.imageView as? NativeSidebarSymbolImageView)?.rendersLiteralTint = isTag
+        cell.imageTextOffset = isTag ? 18 : 21
+        cell.symbolPointSize = isTag ? 8 : 15
+        cell.trailingInset = 2
+        cell.textVerticalOffset = node.isSection ? 0 : -1
+        cell.trailingVerticalOffset = -1
+        cell.symbolVerticalOffset = isTag ? -0.5 : (node.symbol == "books.vertical" ? 1 : 0)
         cell.setTextStyle(font: .systemFont(ofSize: node.isSection ? 10 : 13,
                                           weight: node.isSection || outlineView.isRowSelected(outlineView.row(forItem: item)) ? .semibold : .regular),
                           color: node.isSection ? .secondaryLabelColor : .labelColor,
-                          symbolColor: node.color ?? (node.isSection ? .secondaryLabelColor : .systemBlue))
+                          symbolColor: node.color ?? (node.isSection ? .secondaryLabelColor : .controlAccentColor))
         cell.setAccessibilityIdentifier("sidebar-\(node.id)")
         return cell
     }
@@ -489,6 +526,8 @@ private extension NSColor {
     convenience init(pmHex: String) {
         var value: UInt64 = 0
         Scanner(string: pmHex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))).scanHexInt64(&value)
-        self.init(red: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1)
+        // The library stores sRGB hex values. Calibrated RGB interprets the same
+        // numbers in a different color space and oversaturates tag dots on P3.
+        self.init(srgbRed: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1)
     }
 }

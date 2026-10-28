@@ -22,6 +22,7 @@ struct ImportPreviewView: View {
     @State private var importTask: Task<Void, Never>?
     @State private var result: ImportSummary?
     @State private var preparationError: String?
+    @State private var showDuplicateOptions = true
 
     private var selectedCount: Int { plan.candidates.filter(\.isSelected).count }
 
@@ -31,7 +32,7 @@ struct ImportPreviewView: View {
         return PMLocalization.format("导入文献（%lld 条）", plan.candidates.count)
     }
 
-    private var duplicateCount: Int { plan.candidates.filter { $0.duplicateID != nil }.count }
+    private var duplicateCount: Int { plan.candidates.filter(\.hasDuplicate).count }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,11 +49,16 @@ struct ImportPreviewView: View {
                             .labelsHidden().toggleStyle(.checkbox)
                             .frame(width: 15).padding(.top, 1)
                             .accessibilityLabel([candidate.paper.displayTitle, candidate.paper.importAuthorsSummary].filter { !$0.isEmpty }.joined(separator: "、"))
+                            .accessibilityIdentifier("import-candidate-select-\(candidate.id)")
                         VStack(alignment: .leading, spacing: 2) {
                             Text(candidate.paper.displayTitle).font(.system(size: 13)).lineLimit(1)
                             if !candidate.paper.importAuthorsSummary.isEmpty {
                                 Text(candidate.paper.importAuthorsSummary).font(.system(size: 10))
                                     .foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            if candidate.hasDuplicate {
+                                Text(PMLocalization.text(candidate.duplicateID != nil ? "文库中已存在" : "本批次重复"))
+                                    .font(.system(size: 10)).foregroundStyle(.orange)
                             }
                         }
                         Spacer(minLength: 0)
@@ -72,7 +78,7 @@ struct ImportPreviewView: View {
             }
 
             if duplicateCount > 0, result == nil {
-                DisclosureGroup("遇到重复") {
+                DisclosureGroup("遇到重复", isExpanded: $showDuplicateOptions) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
@@ -80,23 +86,28 @@ struct ImportPreviewView: View {
                                     ForEach(ImportDuplicateAction.allCases) { Text($0.label).tag($0) }
                                 }.labelsHidden().frame(width: 150)
                                 Button("应用到全部") {
-                                    for index in plan.candidates.indices where plan.candidates[index].duplicateID != nil {
+                                    // A replacement may make a later row a
+                                    // duplicate. Carry the chosen batch policy
+                                    // into those newly revealed relationships.
+                                    for index in plan.candidates.indices {
                                         plan.candidates[index].duplicateAction = duplicateAction
                                     }
-                                }
+                                }.accessibilityIdentifier("import-duplicate-apply-all")
                                 Spacer(minLength: 0)
                             }
                             Text("替换保留已有评分、备注、附件和标注。")
                                 .foregroundStyle(.secondary)
                             ForEach($plan.candidates) { $candidate in
-                                if let id = candidate.duplicateID {
+                                if candidate.hasDuplicate {
                                     HStack(spacing: 8) {
                                         Text(candidate.paper.displayTitle).lineLimit(1)
                                         Spacer(minLength: 0)
                                         Picker("重复处理", selection: $candidate.duplicateAction) {
                                             ForEach(ImportDuplicateAction.allCases) { Text($0.label).tag($0) }
                                         }.labelsHidden().frame(width: 140)
-                                        Button("打开已有") { dismiss(); onOpenExisting(id) }
+                                        if let id = candidate.duplicateID {
+                                            Button("打开已有") { dismiss(); onOpenExisting(id) }
+                                        }
                                     }
                                 }
                             }
@@ -152,12 +163,20 @@ struct ImportPreviewView: View {
         }
         .frame(width: 500, height: 400)
         .interactiveDismissDisabled(isImporting)
+        .onChange(of: plan.candidates.map(\.isSelected)) { _, _ in refreshDuplicateMatches() }
+        .onChange(of: plan.candidates.map(\.duplicateAction)) { _, _ in refreshDuplicateMatches() }
+        .onChange(of: store.papers) { _, _ in refreshDuplicateMatches() }
         .onDisappear { importTask?.cancel() }
     }
 
     private func toggleAll() {
         let select = selectedCount != plan.candidates.count
         for index in plan.candidates.indices { plan.candidates[index].isSelected = select }
+    }
+
+    private func refreshDuplicateMatches() {
+        guard !isImporting, result == nil else { return }
+        ImportService.refreshDuplicateMatches(in: &plan, store: store)
     }
 
     private func startImport() {

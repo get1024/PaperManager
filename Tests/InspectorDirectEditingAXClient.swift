@@ -38,24 +38,36 @@ struct InspectorDirectEditingAXClient {
             let status = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
             return status == .success ? value : nil
         }
-        var queue = read(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
-        var seen: [AXUIElement] = []
-        while !queue.isEmpty && seen.count < 2000 {
-            let element = queue.removeFirst()
-            if seen.contains(where: { CFEqual($0, element) }) { continue }
-            seen.append(element)
-            if read(element, kAXIdentifierAttribute as String) as? String == identifier {
-                var names: CFArray?
-                _ = AXUIElementCopyActionNames(element, &names)
-                if (names as? [String])?.contains(kAXPressAction as String) == true {
-                    let status = AXUIElementPerformAction(element, kAXPressAction as CFString)
-                    // Host verifies the actual native editor, never retries a
-                    // delivered SwiftUI action simply because it returned -25200.
-                    return status == .success || status == .failure ? nil : "AX press error \(status.rawValue)"
+        // A key SwiftUI window may precede its externally published AX tree.
+        // Wait by reading only; once an action is dispatched it is never replayed.
+        let deadline = Date().addingTimeInterval(2)
+        var scanned = 0
+        var windows = 0
+        var attempts = 0
+        repeat {
+            var queue = read(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
+            windows = queue.count
+            var seen: [AXUIElement] = []
+            attempts += 1
+            while !queue.isEmpty && seen.count < 2000 {
+                let element = queue.removeFirst()
+                if seen.contains(where: { CFEqual($0, element) }) { continue }
+                seen.append(element)
+                if read(element, kAXIdentifierAttribute as String) as? String == identifier {
+                    var names: CFArray?
+                    _ = AXUIElementCopyActionNames(element, &names)
+                    if (names as? [String])?.contains(kAXPressAction as String) == true {
+                        let status = AXUIElementPerformAction(element, kAXPressAction as CFString)
+                        // Host verifies the actual native editor, never retries a
+                        // delivered SwiftUI action simply because it returned -25200.
+                        return status == .success || status == .failure ? nil : "AX press error \(status.rawValue)"
+                    }
                 }
+                queue.append(contentsOf: read(element, kAXChildrenAttribute as String) as? [AXUIElement] ?? [])
             }
-            queue.append(contentsOf: read(element, kAXChildrenAttribute as String) as? [AXUIElement] ?? [])
-        }
-        return "No direct activation action for \(identifier), scanned \(seen.count) nodes"
+            scanned = seen.count
+            if Date() < deadline { usleep(50_000) }
+        } while Date() < deadline
+        return "No direct activation action for \(identifier), scanned \(scanned) nodes in \(windows) windows after \(attempts) read-only readiness checks"
     }
 }

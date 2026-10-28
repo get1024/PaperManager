@@ -21,6 +21,10 @@ struct ImportBackupTests {
             ("BibTeX macros preserve spaces, concatenation and literal hashes", testMacros),
             ("BibTeX comments and escaped literals", testComments),
             ("PDF ISBN-10 and ISBN-13 checksum validation", testISBN),
+            ("RIS journal serials preserve distinct articles through skip and replace", testRISSerialIdentity),
+            ("Equivalent DOIs share one identity and conflicting DOIs remain separate", testDOIIdentity),
+            ("Book ISBN identity never merges separate chapters or articles", testBookAndChapterIdentity),
+            ("Serial identifiers survive metadata merge and RIS export settings", testSerialMetadata),
             ("Preparation and deselection leave the library untouched", testPrepare),
             ("Duplicate replacement preserves local work and identity", testReplacement),
             ("Fresh commit detects duplicates within one batch", testBatchDuplicates),
@@ -92,6 +96,122 @@ struct ImportBackupTests {
         try expect(PDFMetadataExtractor.extractISBN(from: "ISBN-13: 978-0-306-40615-7") == "9780306406157", "ISBN13 missing")
         try expect(PDFMetadataExtractor.extractISBN(from: "ISBN 0-8044-2957-X") == "080442957X", "ISBN10 missing")
         try expect(PDFMetadataExtractor.extractISBN(from: "ISBN: 978-0-306-40615-8") == nil, "Bad checksum accepted")
+    }
+
+    static func testRISSerialIdentity() async throws {
+        let root = try sandbox(); defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("same-journal.ris")
+        let text = """
+        TY  - JOUR
+        T1  - First distinct research article
+        PY  - 2026
+        DO  - 10.1000/qa-first
+        SN  - 0028-0836
+        SN  - 1476-4687
+        ER  -
+        TY  - JOUR
+        T1  - Second distinct research article
+        PY  - 2026
+        DO  - 10.1000/qa-second
+        SN  - 0028-0836
+        ER  -
+        TY  - JOUR
+        T1  - Third article without DOI
+        SN  - 0028-0836
+        ER  -
+        TY  - JOUR
+        T1  - Fourth article without DOI
+        SN  - 0028-0836
+        ER  -
+        """
+        try text.write(to: source, atomically: true, encoding: .utf8)
+        let records = RISParser.parse(text)
+        try expect(records.count == 4 && records.allSatisfy { $0.isbn.isEmpty }, "Journal ISSNs were misclassified as book ISBNs")
+        try expect(records[0].customFields.filter { $0.key == "ISSN" }.map(\.value) == ["0028-0836", "1476-4687"], "Print/electronic serial metadata was lost")
+        let roundTrip = RISParser.parse(ExportService.ris(for: records))
+        try expect(roundTrip.map { $0.customFields.map(\.value) } == records.map { $0.customFields.map(\.value) }, "RIS serial numbers changed or multiplied during round trip")
+
+        let store = LibraryStore(persistenceURL: root.appendingPathComponent("library.json"))
+        store.updateSetting(\.autoExtractMetadataAfterImport, value: false)
+        var plan = await ImportService.prepare([source], store: store)
+        for index in plan.candidates.indices { plan.candidates[index].duplicateAction = .replace }
+        let inserted = await ImportService.commit(plan, into: store, targetFilter: nil)
+        try expect(inserted.imported == 4 && inserted.replaced == 0 && inserted.skipped == 0 && store.papers.count == 4, "Same-journal articles were skipped or overwritten")
+        let identities = Set(store.papers.map(\.id))
+        let before = try Data(contentsOf: store.persistenceURL)
+        let repeated = await ImportService.prepare([source], store: store)
+        try expect(repeated.candidates.allSatisfy { $0.duplicateID != nil }, "A reimport did not recognize existing articles")
+        try expect(try Data(contentsOf: store.persistenceURL) == before, "Preparing duplicate metadata wrote the library")
+        let skipped = await ImportService.commit(repeated, into: store, targetFilter: nil)
+        try expect(skipped.skipped == 4 && store.papers.count == 4, "Reimporting identical RIS created extra articles")
+        var replacement = repeated
+        for index in replacement.candidates.indices { replacement.candidates[index].duplicateAction = .replace }
+        let replaced = await ImportService.commit(replacement, into: store, targetFilter: nil)
+        try expect(replaced.replaced == 4 && Set(store.papers.map(\.id)) == identities, "Replacing known articles lost their identities")
+    }
+
+    static func testDOIIdentity() async throws {
+        let root = try sandbox(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = LibraryStore(persistenceURL: root.appendingPathComponent("library.json"))
+        store.updateSetting(\.autoExtractMetadataAfterImport, value: false)
+        var original = Paper(); original.title = "Original metadata"; original.doi = "10.1000/normalized"
+        let id = store.addPaper(original)
+        let variants = [" 10.1000/NORMALIZED \n", "doi: 10.1000/normalized", "DOI: https://DOI.org/10.1000/NORMALIZED", "https://doi.org/10.1000/normalized", "HTTP://dx.doi.org/10.1000/normalized", "https://doi.org/10.1000%2Fnormalized"]
+        for (index, doi) in variants.enumerated() {
+            var incoming = Paper(); incoming.title = "Other source metadata \(index)"; incoming.doi = doi
+            try expect(store.duplicatePaperID(for: incoming) == id, "Equivalent DOI was not recognized: \(doi)")
+            let result = await ImportService.commit(ImportService.prepare(papers: [incoming], store: store), into: store, targetFilter: nil)
+            try expect(result.skipped == 1 && store.papers.count == 1, "Equivalent DOI created a second record")
+        }
+        var fallback = Paper(); fallback.title = "Same title from another source"; fallback.year = 2026
+        var exact = original; exact.title = "Different title with exact DOI"
+        var requested = original; requested.id = UUID(); requested.title = fallback.title; requested.year = 2026
+        try expect(LibraryStore.duplicatePaperID(for: requested, among: [fallback, exact]) == exact.id, "A title-only match took precedence over the exact DOI")
+        var conflict = original; conflict.id = UUID(); conflict.doi = "10.1000/different"
+        try expect(store.duplicatePaperID(for: conflict) == nil, "Different reliable DOIs were merged because titles matched")
+        for value in ["", "not a DOI", "10.1000/", "https://example.org/10.1000/normalized", "10.1000/contains a space"] {
+            try expect(value.normalizedDOI == nil, "Malformed value qualified as reliable DOI: \(value)")
+        }
+    }
+
+    static func testBookAndChapterIdentity() async throws {
+        var book = Paper(); book.paperType = .book; book.title = "Book first source"; book.isbn = "978-0-306-40615-7"
+        var sameBook = book; sameBook.id = UUID(); sameBook.title = "Book second source"; sameBook.isbn = "ISBN-13: 9780306406157"
+        try expect(LibraryStore.duplicatePaperID(for: sameBook, among: [book]) == book.id, "Equivalent book ISBN stopped identifying the same book")
+        book.doi = "10.1000/book-first"; sameBook.doi = "10.1000/book-second"; sameBook.title = book.title
+        try expect(LibraryStore.duplicatePaperID(for: sameBook, among: [book]) == nil, "Shared ISBN/title overrode different reliable DOIs")
+        for type in [PaperType.inBook, .inCollection, .inProceedings, .article] {
+            var first = Paper(); first.paperType = type; first.title = "First work"; first.isbn = "9780306406157"
+            var second = first; second.id = UUID(); second.title = "Second work"
+            try expect(LibraryStore.duplicatePaperID(for: second, among: [first]) == nil, "A shared container ISBN merged distinct \(type.rawValue) records")
+            second.title = first.title
+            try expect(LibraryStore.duplicatePaperID(for: second, among: [first]) == first.id, "Reimporting the same chapter stopped deduplicating by title/year")
+            if type != .article {
+                second.isbn = "9780804429573"
+                try expect(LibraryStore.duplicatePaperID(for: second, among: [first]) == nil, "Same-titled chapters from known different books were merged")
+                second.isbn = first.isbn; first.bookTitle = "First container"; second.bookTitle = "Second container"
+                try expect(LibraryStore.duplicatePaperID(for: second, among: [first]) == nil, "Different chapter containers were ignored by title matching")
+                first.bookTitle = ""; second.bookTitle = ""
+            }
+            first.isbn = "0028-0836"; second.isbn = first.isbn; second.title = "Another title"
+            try expect(LibraryStore.duplicatePaperID(for: second, among: [first]) == nil, "A legacy ISSN in ISBN merged distinct works")
+        }
+    }
+
+    static func testSerialMetadata() async throws {
+        var metadata = PaperMetadata(); metadata.title = "Journal article"; metadata.issns = ["0028-0836", "1476-4687"]
+        let paper = metadata.asPaper
+        try expect(paper.isbn.isEmpty && paper.customFields.count == 2, "Provider ISSN was treated as an ISBN")
+        let merged = metadata.merged(into: paper, replaceExisting: true)
+        try expect(merged.customFields.count == 2, "Repeated metadata refresh duplicated serial fields")
+        var settings = AppSettings.defaults; settings.setCitationExport(.customFields, included: false)
+        let exported = ExportService.ris(for: [merged], settings: settings)
+        try expect(exported.contains("SN  - 0028-0836") && !exported.contains("C1  -"), "Disabling optional custom fields removed the journal serial identifier")
+        let restored = RISParser.parse(exported)[0]
+        try expect(restored.isbn.isEmpty && restored.customFields.map(\.value) == ["0028-0836", "1476-4687"], "Serial identifiers did not survive RIS export")
+        let oldMetadata = try JSONSerialization.jsonObject(with: JSONEncoder().encode(PaperMetadata())) as! [String: Any]
+        let decoded = try JSONDecoder().decode(PaperMetadata.self, from: JSONSerialization.data(withJSONObject: oldMetadata.filter { $0.key != "issns" }))
+        try expect(decoded.issns == nil, "New optional provider metadata broke older encoded metadata")
     }
 
     static func testPrepare() async throws {

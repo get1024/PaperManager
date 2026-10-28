@@ -1,4 +1,5 @@
 import Combine
+import CoreGraphics
 import Darwin
 import Foundation
 
@@ -53,6 +54,10 @@ struct ServiceCorrectnessTests {
         await run("File-library settings report failed persistence and permit a durable retry", testSettingsPersistenceResult)
         await run("Single language setting returns persistence failure without publishing a new language", testLanguagePersistenceResult)
         await run("Port submissions reject invalid input and preserve committed settings on save failure", testLocalAPIPortValidation)
+        await run("Unsupported local library schemas reject writes and preserve unknown bytes", testUnsupportedLocalSchema)
+        await run("Unsupported replacement snapshots cannot overwrite a supported library", testUnsupportedReplacementSchema)
+        await run("Attachment refresh detects deletion and recovery without writing the library", testAttachmentAvailability)
+        await run("Stale attachment scans preserve edits and replacement paths", testAttachmentRefreshPreservesEdits)
         await run("Library queries preserve filters, membership search and edited snapshot contents", testLibraryQueries)
         await run("Library query sorting preserves optional values and identical-title ordering", testLibraryQuerySorting)
         await run("Sidebar counts deduplicate shared ancestors and match direct memberships", testSidebarCounts)
@@ -99,6 +104,102 @@ struct ServiceCorrectnessTests {
     static func unblockWrites(_ store: LibraryStore, saved: URL) throws {
         try FileManager.default.removeItem(at: store.persistenceURL)
         try FileManager.default.moveItem(at: saved, to: store.persistenceURL)
+    }
+
+    static func testUnsupportedLocalSchema() async throws {
+        let url = try root(); defer { try? FileManager.default.removeItem(at: url) }
+        let file = url.appendingPathComponent("library.json")
+        var snapshot = LibrarySnapshot.empty; snapshot.schemaVersion = 99
+        snapshot.papers = [Paper(title: "Future document")]
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        var object = try JSONSerialization.jsonObject(with: encoder.encode(snapshot)) as! [String: Any]
+        object["futureUserContent"] = ["notes": "Never discard this content"]
+        let original = try JSONSerialization.data(withJSONObject: object)
+        try original.write(to: file)
+        let store = LibraryStore(persistenceURL: file)
+        try expect(store.loadError != nil, "Unsupported schema was silently opened for writing")
+        try expect(!store.updateSetting(\.autoExtractMetadataAfterImport, value: false), "Settings overwrote an unsupported library")
+        do { try store.addPaperDurably(Paper(title: "Must not write")); throw Failure(description: "Unsupported library accepted an edit") }
+        catch is Failure { throw Failure(description: "Unsupported library accepted an edit") }
+        catch { }
+        store.save()
+        await store.waitForAttachmentRefresh()
+        try expect(try Data(contentsOf: file) == original, "Unsupported library bytes or unknown fields changed")
+        // Explicit supported restore remains possible and preserves the source.
+        try store.replaceSnapshotDurably(.empty)
+        let preserved = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("library-unreadable-") }
+        try expect(preserved.count == 1 && (try Data(contentsOf: preserved[0])) == original,
+                   "Explicit recovery did not preserve the unsupported original")
+    }
+
+    static func testUnsupportedReplacementSchema() async throws {
+        let url = try root(); defer { try? FileManager.default.removeItem(at: url) }
+        let store = LibraryStore(persistenceURL: url.appendingPathComponent("library.json"))
+        let paper = Paper(title: "Existing supported document")
+        try store.addPaperDurably(paper)
+        let original = try Data(contentsOf: store.persistenceURL)
+        var future = LibrarySnapshot.empty; future.schemaVersion = 99
+        do { try store.replaceSnapshotDurably(future); throw Failure(description: "Future replacement was written") }
+        catch is Failure { throw Failure(description: "Future replacement was written") }
+        catch { }
+        try expect(store.paper(with: paper.id) != nil && (try Data(contentsOf: store.persistenceURL)) == original,
+                   "Unsupported replacement changed durable or published state")
+    }
+
+    static func createPDF(at url: URL) throws {
+        var bounds = CGRect(x: 0, y: 0, width: 100, height: 100)
+        guard let context = CGContext(url as CFURL, mediaBox: &bounds, nil) else {
+            throw Failure(description: "Could not create PDF fixture")
+        }
+        context.beginPDFPage(nil); context.endPDFPage(); context.closePDF()
+    }
+
+    static func testAttachmentAvailability() async throws {
+        let url = try root(); defer { try? FileManager.default.removeItem(at: url) }
+        let store = LibraryStore(persistenceURL: url.appendingPathComponent("library.json"))
+        let paper = Paper(title: "External attachment")
+        let pdf = url.appendingPathComponent("external.pdf")
+        try createPDF(at: pdf)
+        try store.addPaperDurably(paper)
+        try store.attachFile(pdf, to: paper.id, kind: .pdf)
+        let original = try Data(contentsOf: store.persistenceURL)
+        try FileManager.default.removeItem(at: pdf)
+        store.load()
+        await store.waitForAttachmentRefresh()
+        try expect(store.paper(with: paper.id)?.hasPDF == false, "Deleted PDF still appears available after reload")
+        try expect(store.filteredPapers(for: .missingPDF, searchText: "", includeSubcollections: true).map(\.id) == [paper.id]
+                   && store.sidebarCounts(includeSubcollections: true).missingPDF == 1, "Missing PDF filter/count did not refresh")
+        try expect(try Data(contentsOf: store.persistenceURL) == original, "Availability refresh wrote user library bytes")
+        try createPDF(at: pdf)
+        store.refreshAttachmentAvailability()
+        await store.waitForAttachmentRefresh()
+        try expect(store.paper(with: paper.id)?.hasPDF == true && store.sidebarCounts(includeSubcollections: true).missingPDF == 0,
+                   "Recovered PDF retained a stale missing flag")
+        try expect(try Data(contentsOf: store.persistenceURL) == original, "Recovery scan wrote user library bytes")
+    }
+
+    static func testAttachmentRefreshPreservesEdits() async throws {
+        let url = try root(); defer { try? FileManager.default.removeItem(at: url) }
+        let store = LibraryStore(persistenceURL: url.appendingPathComponent("library.json"))
+        var paper = Paper(title: "Before")
+        let missing = url.appendingPathComponent("gone.pdf")
+        let replacement = url.appendingPathComponent("replacement.pdf")
+        try createPDF(at: replacement)
+        paper.attachments = [Attachment(kind: .pdf, filePath: missing.path, displayName: "gone.pdf")]
+        try store.addPaperDurably(paper)
+        store.refreshAttachmentAvailability()
+        // No suspension: publish a new path and title before the scan can apply.
+        paper.title = "Edited during scan"
+        paper.attachments[0].filePath = replacement.path
+        try store.updatePaperDurably(paper)
+        await store.waitForAttachmentRefresh()
+        try expect(store.paper(with: paper.id)?.title == paper.title && store.paper(with: paper.id)?.hasPDF == true,
+                   "Stale scan replaced a user edit or marked the replacement path missing")
+        store.refreshAttachmentAvailability()
+        try store.replaceSnapshotDurably(.empty)
+        await store.waitForAttachmentRefresh()
+        try expect(store.snapshot.papers.isEmpty, "Old scan repopulated a restored library")
     }
     static func testLibraryQueries() async throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -501,6 +602,7 @@ struct ServiceCorrectnessTests {
         let paper = Paper(title: "Second library only"); try other.addPaperDurably(paper)
         server.reconfigure(with: other)
         for _ in 0..<100 where !server.isRunning { try await Task.sleep(nanoseconds: 20_000_000) }
+        try expect(server.isRunning, "Listener did not become ready after switching libraries: \(server.statusText)")
         let (data, response) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/api/v1/papers")!)
         let papers = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["papers"] as? [[String: Any]]
         try expect((response as? HTTPURLResponse)?.statusCode == 200 && papers?.first?["id"] as? String == paper.id.uuidString,

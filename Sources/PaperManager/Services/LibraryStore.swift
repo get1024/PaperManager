@@ -28,6 +28,36 @@ private struct FileOperationOutcome {
     var receipt: FilePlacementReceipt?
 }
 
+private struct AttachmentAvailabilityCheck {
+    var paperID: UUID
+    var attachment: Attachment
+}
+
+private struct AttachmentAvailabilityResult {
+    var check: AttachmentAvailabilityCheck
+    var missing: Bool
+}
+
+/// Permission/bookmark errors are inconclusive. Only a successful reachability
+/// check or an explicit missing-file error changes the last known state.
+private func checkAttachmentAvailability(_ checks: [AttachmentAvailabilityCheck]) -> [AttachmentAvailabilityResult] {
+    checks.compactMap { check in
+        guard !Task.isCancelled else { return nil }
+        do {
+            let reachable = try check.attachment.withResolvedURL { try $0.checkResourceIsReachable() }
+            return AttachmentAvailabilityResult(check: check, missing: !reachable)
+        } catch {
+            let value = error as NSError
+            let underlying = value.userInfo[NSUnderlyingErrorKey] as? NSError
+            let isMissing = (value.domain == NSCocoaErrorDomain &&
+                [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(value.code)) ||
+                (value.domain == NSPOSIXErrorDomain && value.code == Int(ENOENT)) ||
+                (underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(ENOENT))
+            return isMissing ? AttachmentAvailabilityResult(check: check, missing: true) : nil
+        }
+    }
+}
+
 @MainActor
 private final class WeakLibraryStore {
     weak var value: LibraryStore?
@@ -36,9 +66,17 @@ private final class WeakLibraryStore {
 
 @MainActor
 final class LibraryStore: ObservableObject {
+    lazy var readingSession = ReadingSessionService(store: self)
     private static var liveStores: [WeakLibraryStore] = []
     private static var fileOperationShutdownRequested = false
-    @Published private(set) var snapshot: LibrarySnapshot
+    @Published private(set) var snapshot: LibrarySnapshot {
+        didSet {
+            queryCache = nil
+            sidebarCountCache.removeAll(keepingCapacity: true)
+        }
+    }
+    private var queryCache: LibraryQuery.Index?
+    private var sidebarCountCache: [Bool: LibrarySidebarCounts] = [:]
     @Published var statusMessage: String?
     @Published var isBusy = false
     @Published private(set) var loadError: String?
@@ -50,6 +88,9 @@ final class LibraryStore: ObservableObject {
     private let metadataLookup: (Paper) async throws -> PaperMetadata
     private let filePlacement: (FilePlacementPlan) throws -> FilePlacementReceipt
     private var fileOperationTask: Task<Void, Never>?
+    private var attachmentRefreshTask: Task<Void, Never>?
+    private var attachmentRefreshRequest = UUID()
+    private var fileAvailabilityGeneration = UUID()
     private var metadataRefreshTask: Task<Void, Never>?
     private var metadataRefreshPending: [UUID] = []
     private var metadataRefreshActiveIDs: Set<UUID> = []
@@ -94,6 +135,62 @@ final class LibraryStore: ObservableObject {
     }
 
     static func resumeAfterCancelledFileOperationShutdown() { fileOperationShutdownRequested = false }
+
+    static func refreshLiveAttachmentAvailability() {
+        liveStores.removeAll { $0.value == nil }
+        liveStores.compactMap(\.value).forEach { $0.refreshAttachmentAvailability() }
+    }
+
+    /// Derived availability is refreshed off the main thread. Publishing it
+    /// never writes or migrates the user's library; ordinary durable edits keep
+    /// their existing save semantics. A stale scan cannot replace newer paths.
+    func refreshAttachmentAvailability() {
+        attachmentRefreshTask?.cancel()
+        attachmentRefreshRequest = UUID()
+        let request = attachmentRefreshRequest
+        let generation = libraryGeneration
+        guard loadError == nil else { attachmentRefreshTask = nil; return }
+        let pendingFileOperation = fileOperationTask
+        attachmentRefreshTask = Task { [weak self] in
+            // A move temporarily removes its source before durable commit or
+            // rollback. Do not publish that intermediate state as a lost file.
+            await pendingFileOperation?.value
+            guard let self, !Task.isCancelled, self.attachmentRefreshRequest == request,
+                  self.libraryGeneration == generation, self.loadError == nil else { return }
+            let fileGeneration = self.fileAvailabilityGeneration
+            let checks = self.snapshot.papers.flatMap { paper in
+                paper.attachments.map { AttachmentAvailabilityCheck(paperID: paper.id, attachment: $0) }
+            }
+            let worker = Task.detached(priority: .utility) { checkAttachmentAvailability(checks) }
+            let results = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
+            guard !Task.isCancelled, self.attachmentRefreshRequest == request,
+                  self.libraryGeneration == generation, self.loadError == nil else { return }
+            guard self.fileAvailabilityGeneration == fileGeneration, !self.isFileOperationRunning else {
+                self.refreshAttachmentAvailability()
+                return
+            }
+            var updated = self.snapshot
+            var changed = false
+            let paperIndices = Dictionary(updated.papers.enumerated().map { ($0.element.id, $0.offset) },
+                                          uniquingKeysWith: { first, _ in first })
+            for result in results {
+                guard let paperIndex = paperIndices[result.check.paperID],
+                      let index = updated.papers[paperIndex].attachments.firstIndex(where: { $0.id == result.check.attachment.id }) else { continue }
+                let current = updated.papers[paperIndex].attachments[index]
+                guard current.filePath == result.check.attachment.filePath,
+                      current.bookmarkData == result.check.attachment.bookmarkData,
+                      current.missing != result.missing else { continue }
+                updated.papers[paperIndex].attachments[index].missing = result.missing
+                changed = true
+            }
+            if changed { self.snapshot = updated }
+            self.attachmentRefreshTask = nil
+        }
+    }
+
+    func waitForAttachmentRefresh() async {
+        while let task = attachmentRefreshTask { await task.value }
+    }
 
     func isRefreshingMetadata(paperID: UUID) -> Bool {
         metadataRefreshPending.contains(paperID) || metadataRefreshActiveIDs.contains(paperID)
@@ -286,6 +383,10 @@ final class LibraryStore: ObservableObject {
     }
 
     func load() {
+        guard readingSession.pause() else { return }
+        attachmentRefreshTask?.cancel()
+        attachmentRefreshTask = nil
+        attachmentRefreshRequest = UUID()
         loadError = nil
         do {
             guard FileManager.default.fileExists(atPath: persistenceURL.path) else {
@@ -295,7 +396,10 @@ final class LibraryStore: ObservableObject {
             let data = try Data(contentsOf: persistenceURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            snapshot = try decoder.decode(LibrarySnapshot.self, from: data)
+            let loaded = try decoder.decode(LibrarySnapshot.self, from: data)
+            try Self.requireSupportedSchema(loaded)
+            snapshot = loaded
+            refreshAttachmentAvailability()
         } catch {
             statusMessage = "Failed to load library: \(error.localizedDescription)"
             loadError = statusMessage
@@ -365,6 +469,7 @@ final class LibraryStore: ObservableObject {
                 .appendingPathComponent("library-unreadable-\(UUID().uuidString).json")
             try FileManager.default.copyItem(at: persistenceURL, to: preserved)
         }
+        guard readingSession.pause() else { throw PaperManagerError.message("阅读时间尚未保存。") }
         try writeSnapshot(newSnapshot)
         // Restored/merged snapshots may deliberately reuse paper IDs and their
         // identifiers. Requests issued against the previous library must never
@@ -375,14 +480,22 @@ final class LibraryStore: ObservableObject {
         cancelFileOperation()
         snapshot = newSnapshot
         loadError = nil
+        refreshAttachmentAvailability()
     }
 
     private func writeSnapshot(_ value: LibrarySnapshot) throws {
+        try Self.requireSupportedSchema(value)
         try FileManager.default.createDirectory(at: persistenceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(value).write(to: persistenceURL, options: [.atomic])
+    }
+
+    private static func requireSupportedSchema(_ value: LibrarySnapshot) throws {
+        guard value.schemaVersion == LibrarySnapshot.supportedSchemaVersion else {
+            throw PaperManagerError.message(PMLocalization.format("不支持文库版本 %d。已停止写入，请使用支持此版本的 PaperManager 打开。", value.schemaVersion))
+        }
     }
 
     @discardableResult
@@ -418,7 +531,10 @@ final class LibraryStore: ObservableObject {
     }
 
     func sidebarCounts(includeSubcollections: Bool) -> LibrarySidebarCounts {
-        LibraryQuery.sidebarCounts(in: snapshot, includeSubcollections: includeSubcollections)
+        if let counts = sidebarCountCache[includeSubcollections] { return counts }
+        let counts = LibraryQuery.sidebarCounts(in: snapshot, includeSubcollections: includeSubcollections)
+        sidebarCountCache[includeSubcollections] = counts
+        return counts
     }
 
     func filteredPapers(
@@ -427,8 +543,9 @@ final class LibraryStore: ObservableObject {
         includeSubcollections: Bool,
         sortDescriptor: PaperSortDescriptor = .defaultValue
     ) -> [Paper] {
-        LibraryQuery.papers(in: snapshot, filter: filter, searchText: searchText,
-                            includeSubcollections: includeSubcollections, sortDescriptor: sortDescriptor)
+        if queryCache == nil { queryCache = LibraryQuery.Index(snapshot: snapshot) }
+        return queryCache!.papers(filter: filter, searchText: searchText,
+                                  includeSubcollections: includeSubcollections, sortDescriptor: sortDescriptor)
     }
 
     @discardableResult
@@ -494,6 +611,16 @@ final class LibraryStore: ObservableObject {
     func updatePaper(_ paper: Paper) -> Bool {
         do { try updatePaperDurably(paper); return true }
         catch { statusMessage = PMLocalization.format("保存文库失败：%@", error.localizedDescription); return false }
+    }
+
+    /// Discrete rating changes share the committed record across the table and
+    /// inspector. Reading the latest paper here also preserves unrelated drafts
+    /// and edits from other views instead of writing an editor's stale copy.
+    @discardableResult
+    func updateRating(_ rating: Int, for paperID: UUID) -> Bool {
+        guard var paper = paper(with: paperID) else { return false }
+        paper.rating = min(5, max(0, rating))
+        return updatePaper(paper)
     }
 
     func markOpened(_ paperID: UUID) {
@@ -829,16 +956,37 @@ final class LibraryStore: ObservableObject {
     }
 
     func duplicatePaperID(for paper: Paper) -> UUID? {
-        let doi = paper.doi.trimmed.lowercased()
-        let isbn = paper.isbn.trimmed.lowercased()
+        Self.duplicatePaperID(for: paper, among: snapshot.papers)
+    }
+
+    static func duplicatePaperID(for paper: Paper, among papers: [Paper]) -> UUID? {
+        let doi = paper.doi.normalizedDOI
+        let isbn = paper.isbn.normalizedISBN
         let eprint = paper.eprint.trimmed.lowercased()
         let title = paper.title.trimmed.lowercased()
-        return snapshot.papers.first { existing in
+        if let doi, let exact = papers.first(where: { $0.id != paper.id && $0.doi.normalizedDOI == doi }) {
+            return exact.id
+        }
+        return papers.first { existing in
             if existing.id == paper.id { return false }
-            if !doi.isEmpty && existing.doi.trimmed.lowercased() == doi { return true }
-            if !isbn.isEmpty && existing.isbn.trimmed.lowercased() == isbn { return true }
+            if let doi, let existingDOI = existing.doi.normalizedDOI {
+                // Distinct reliable article/work identifiers take precedence
+                // over shared container identifiers and coincident titles.
+                return doi == existingDOI
+            }
+            // An ISBN can identify a whole book or proceedings volume, while
+            // chapters and conference papers share their container's ISBN.
+            if let isbn, [.book, .proceedings].contains(paper.paperType),
+               existing.paperType == paper.paperType, existing.isbn.normalizedISBN == isbn { return true }
             if !eprint.isEmpty && existing.eprint.trimmed.lowercased() == eprint { return true }
             if !title.isEmpty && existing.title.trimmed.lowercased() == title {
+                let componentTypes: [PaperType] = [.inBook, .inCollection, .inProceedings]
+                if componentTypes.contains(paper.paperType) || componentTypes.contains(existing.paperType) {
+                    if let isbn, let existingISBN = existing.isbn.normalizedISBN, isbn != existingISBN { return false }
+                    let container = paper.bookTitle.trimmed.lowercased()
+                    let existingContainer = existing.bookTitle.trimmed.lowercased()
+                    if !container.isEmpty && !existingContainer.isEmpty && container != existingContainer { return false }
+                }
                 return existing.year == paper.year
             }
             return false
@@ -902,6 +1050,7 @@ final class LibraryStore: ObservableObject {
             paper.attachments.map { (paper.id, $0.id) }
         }
         guard !jobs.isEmpty else { return false }
+        fileAvailabilityGeneration = UUID()
         fileOperationProgress = FileOperationProgress(total: jobs.count)
         let generation = libraryGeneration
         fileOperationTask = Task { [weak self] in
@@ -923,6 +1072,7 @@ final class LibraryStore: ObservableObject {
         defer {
             fileOperationProgress?.cancelled = Task.isCancelled || generation != libraryGeneration
             fileOperationProgress?.isRunning = false
+            fileAvailabilityGeneration = UUID()
             fileOperationTask = nil
             if generation == libraryGeneration, let progress = fileOperationProgress {
                 let summary = FileOperationSummary(completed: progress.completed, unchanged: progress.unchanged + progress.failed,
@@ -1030,6 +1180,8 @@ final class LibraryStore: ObservableObject {
 
     private func performFileOperation(paperIDs: Set<UUID>, renameOnly: Bool) throws -> FileOperationSummary {
         guard !isFileOperationRunning else { throw PaperManagerError.message("文件操作正在进行，请先停止或等待完成。") }
+        fileAvailabilityGeneration = UUID()
+        defer { fileAvailabilityGeneration = UUID() }
         if !renameOnly, !FileLibraryService.status(for: settings).isAvailable {
             throw PaperManagerError.message("请先在设置中配置或修复文件库，再整理现有文件。")
         }

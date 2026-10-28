@@ -225,6 +225,9 @@ jobs:
 
           The app is ad-hoc signed by CI. It is not notarized.
           EOF
+          if [[ -f "docs/releases/$TAG.md" ]]; then
+            cp "docs/releases/$TAG.md" "$NOTES_FILE"
+          fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$INSTALLER_PATH" "$SHA_PATH" --clobber

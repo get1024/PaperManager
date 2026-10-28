@@ -110,23 +110,34 @@ final class NativeTextCell: NSTableCellView {
     private var lastContent: (symbol: String, text: String, trailing: String)?
     private var normalTextColor = NSColor.labelColor
     private var normalSymbolColor = NSColor.secondaryLabelColor
+    private var emphasizedTextColor = NSColor.selectedControlTextColor
     var contentLeadingInset: CGFloat = 0
     var imageTextOffset: CGFloat = 23
+    var trailingInset: CGFloat = 4 { didSet { if trailingInset != oldValue { needsLayout = true } } }
+    var textVerticalOffset: CGFloat = 0 { didSet { if textVerticalOffset != oldValue { needsLayout = true } } }
+    var trailingVerticalOffset: CGFloat = 0 { didSet { if trailingVerticalOffset != oldValue { needsLayout = true } } }
+    var symbolHorizontalOffset: CGFloat = 0 { didSet { if symbolHorizontalOffset != oldValue { needsLayout = true } } }
+    var symbolVerticalOffset: CGFloat = 0 { didSet { if symbolVerticalOffset != oldValue { needsLayout = true } } }
+    var symbolPointSize: CGFloat? {
+        didSet { if symbolPointSize != oldValue { updateSymbolImage() } }
+    }
 
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet { updateForegroundColors() }
     }
 
-    func setTextStyle(font: NSFont, color: NSColor, symbolColor: NSColor = .secondaryLabelColor) {
+    func setTextStyle(font: NSFont, color: NSColor, symbolColor: NSColor = .secondaryLabelColor,
+                      selectedTextColor: NSColor = .selectedControlTextColor) {
         textField?.font = font
         normalTextColor = color
         normalSymbolColor = symbolColor
+        emphasizedTextColor = selectedTextColor
         updateForegroundColors()
     }
 
     private func updateForegroundColors() {
         let selected = backgroundStyle == .emphasized
-        textField?.textColor = selected ? .selectedControlTextColor : normalTextColor
+        textField?.textColor = selected ? emphasizedTextColor : normalTextColor
         trailingLabel.textColor = selected ? .selectedControlTextColor : .tertiaryLabelColor
         let symbolColor: NSColor = selected ? .selectedControlTextColor : normalSymbolColor
         if imageView?.contentTintColor != symbolColor { imageView?.contentTintColor = symbolColor }
@@ -168,27 +179,35 @@ final class NativeTextCell: NSTableCellView {
         textField?.stringValue = text
         trailingLabel.stringValue = trailing
         imageView?.isHidden = symbol.isEmpty
-        if !symbol.isEmpty {
-            if Self.symbols[symbol] == nil {
-                let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-                Self.symbols[symbol] = symbol == "circle.fill"
-                    ? image?.withSymbolConfiguration(.init(pointSize: 8, weight: .regular)) : image
-            }
-            imageView?.image = Self.symbols[symbol]
-        }
+        updateSymbolImage()
         updateForegroundColors()
         needsLayout = true
+    }
+
+    private func updateSymbolImage() {
+        guard let symbol = lastContent?.symbol else { return }
+        if !symbol.isEmpty {
+            let pointSize = symbolPointSize ?? (symbol == "circle.fill" ? 8 : nil)
+            let cacheKey = "\(symbol):\(pointSize.map(String.init(describing:)) ?? "default")"
+            if Self.symbols[cacheKey] == nil {
+                let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+                Self.symbols[cacheKey] = pointSize.map {
+                    image?.withSymbolConfiguration(.init(pointSize: $0, weight: .regular))
+                } ?? image
+            }
+            imageView?.image = Self.symbols[cacheKey]
+        }
     }
 
     override func layout() {
         super.layout()
         let leading: CGFloat = contentLeadingInset + (imageView?.isHidden == false ? imageTextOffset : 0)
-        imageView?.frame = NSRect(x: contentLeadingInset, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        imageView?.frame = NSRect(x: contentLeadingInset + symbolHorizontalOffset, y: (bounds.height - 16) / 2 + symbolVerticalOffset, width: 16, height: 16)
         // NSTextField still insets its drawing rect. A tight intrinsic width
         // can clip the last digit, especially at fractional backing pixels.
         let trailingWidth = trailingLabel.stringValue.isEmpty ? 0 : min(bounds.width / 2, ceil(trailingLabel.intrinsicContentSize.width) + 4)
-        trailingLabel.frame = NSRect(x: bounds.width - trailingWidth - 4, y: (bounds.height - 16) / 2, width: trailingWidth, height: 16)
-        textField?.frame = NSRect(x: leading, y: (bounds.height - 18) / 2,
+        trailingLabel.frame = NSRect(x: bounds.width - trailingWidth - trailingInset, y: (bounds.height - 16) / 2 + trailingVerticalOffset, width: trailingWidth, height: 16)
+        textField?.frame = NSRect(x: leading, y: (bounds.height - 18) / 2 + textVerticalOffset,
                                  width: max(0, bounds.width - leading - (trailingWidth > 0 ? trailingWidth + 9 : 0)), height: 18)
     }
     override func accessibilityValue() -> Any? {
@@ -214,121 +233,19 @@ final class NativeRatingCell: NSTableCellView {
 
     init() {
         super.init(frame: .zero)
+        ratingControl.setStarGeometry(size: 9.5, spacing: 4.5)
+        ratingControl.usesTableStyle = true
+        ratingControl.drawingVerticalOffset = 1.5
         addSubview(ratingControl)
     }
 
-    func configure(rating: Int, onChange: @escaping (Int) -> Void) {
-        ratingControl.configure(rating: rating, onChange: onChange)
+    func configure(rating: Int, identity: UUID? = nil, onChange: @escaping (Int) -> Void) {
+        ratingControl.configure(rating: rating, identity: identity, onChange: onChange)
     }
 
     override func layout() {
         super.layout()
-        ratingControl.frame = NSRect(x: 0, y: 0, width: min(76, bounds.width), height: bounds.height)
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-}
-
-/// Five clickable stars with a single AppKit control and one AX slider. In
-/// macOS 27, creating image NSButtons can invoke a SwiftUI sizing graph even
-/// when the buttons are borderless; never do that while AX materializes rows.
-final class NativeStarRatingControl: NSControl {
-    private(set) var rating = 0
-    private var onChange: ((Int) -> Void)?
-    var usesSelectedColors = false {
-        didSet { if usesSelectedColors != oldValue { needsDisplay = true } }
-    }
-    override var acceptsFirstResponder: Bool { isEnabled }
-
-    init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 76, height: 25))
-        setAccessibilityElement(true)
-        setAccessibilityRole(.slider)
-        setAccessibilityMinValue(NSNumber(value: 0))
-        setAccessibilityMaxValue(NSNumber(value: 5))
-    }
-
-    func configure(rating: Int, onChange: @escaping (Int) -> Void) {
-        self.rating = min(5, max(0, rating))
-        self.onChange = onChange
-        needsDisplay = true
-    }
-
-    func restoreRating(_ value: Int) {
-        rating = min(5, max(0, value))
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let step = min(15, bounds.width / 5)
-        for index in 0..<5 {
-            let center = NSPoint(x: step * (CGFloat(index) + 0.5), y: bounds.midY)
-            let path = NSBezierPath()
-            for point in 0..<10 {
-                let angle = CGFloat.pi / 2 + CGFloat(point) * CGFloat.pi / 5
-                let radius: CGFloat = point.isMultiple(of: 2) ? 5.8 : 2.6
-                let vertex = NSPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
-                if point == 0 { path.move(to: vertex) } else { path.line(to: vertex) }
-            }
-            path.close()
-            if index < rating {
-                NSColor.systemOrange.setFill(); path.fill()
-            } else {
-                let color = usesSelectedColors ? NSColor.selectedControlTextColor.withAlphaComponent(0.7) : .tertiaryLabelColor
-                color.setStroke(); path.lineWidth = 1; path.stroke()
-            }
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard isEnabled else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        guard bounds.contains(point) else { return }
-        window?.makeFirstResponder(self)
-        let value = min(5, max(1, Int(point.x / max(1, min(15, bounds.width / 5))) + 1))
-        commit(value == rating ? 0 : value)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else {
-            super.keyDown(with: event); return
-        }
-        switch event.keyCode {
-        case 123, 125: commit(rating - 1)
-        case 124, 126: commit(rating + 1)
-        case 51, 117: commit(0)
-        default:
-            if let text = event.charactersIgnoringModifiers, let value = Int(text), (0...5).contains(value) { commit(value) }
-            else { super.keyDown(with: event) }
-        }
-    }
-
-    private func commit(_ value: Int) {
-        guard isEnabled else { return }
-        let value = min(5, max(0, value))
-        guard value != rating else { return }
-        rating = value
-        needsDisplay = true
-        onChange?(value)
-        NSAccessibility.post(element: self, notification: .valueChanged)
-    }
-
-    override func accessibilityLabel() -> String? { PMLocalization.text("评分") }
-    override func accessibilityValue() -> Any? { NSNumber(value: rating) }
-    override func accessibilityValueDescription() -> String? { PMLocalization.format("%lld 星", rating) }
-
-    override func setAccessibilityValue(_ value: Any?) {
-        guard let number = value as? NSNumber else { return }
-        commit(number.intValue)
-    }
-
-    override func accessibilityPerformIncrement() -> Bool {
-        guard isEnabled, rating < 5 else { return false }
-        commit(rating + 1); return true
-    }
-
-    override func accessibilityPerformDecrement() -> Bool {
-        guard isEnabled, rating > 0 else { return false }
-        commit(rating - 1); return true
+        ratingControl.frame = NSRect(x: 5, y: 0, width: min(70, max(0, bounds.width - 5)), height: bounds.height)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 }

@@ -13,6 +13,7 @@ mkdir -p "$TEST_WORK_DIR/Sources" "$TEST_WORK_DIR/Fixture" "$TASK_ROOT/.build/te
 cp "$TASK_ROOT"/Sources/PaperManager/Models/*.swift "$TASK_ROOT"/Sources/PaperManager/Services/*.swift \
   "$TASK_ROOT/Sources/PaperManager/Views/ViewUtilities.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/PaperDetailView.swift" \
+  "$TASK_ROOT/Sources/PaperManager/Views/PaperReadingView.swift" \
   "$TASK_ROOT/Sources/PaperManager/Views/InspectorInlineEditor.swift" \
   "$TASK_ROOT/Tests/InspectorTypeMatrixHost.swift" "$TEST_WORK_DIR/Sources/"
 /usr/bin/xcrun swiftc -swift-version 5 -whole-module-optimization -sdk "$TEST_SDK" -target "$PM_TARGET" \
