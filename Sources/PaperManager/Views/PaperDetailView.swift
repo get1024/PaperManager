@@ -610,15 +610,7 @@ private struct PaperEditorView: View {
             }
             .padding(.bottom, 4.5)
 
-            Group {
-                if let attachment = paper.primaryPDF {
-                    PaperPDFPreview(attachment: attachment) { titleEditor }
-                        .id(attachment)
-                } else {
-                    titleEditor
-                }
-            }
-            .padding(.top, 14)
+            titleEditor.padding(.top, 14)
 
             InspectorInlineEditor(text: Binding(get: { paper.authorsText }, set: { paper.authorsText = $0 }),
                                   font: .system(size: 12), nativeFont: .systemFont(ofSize: 12),
@@ -636,6 +628,12 @@ private struct PaperEditorView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.top, 12)
+
+            if let attachment = paper.primaryPDF {
+                PaperPDFPreview(attachment: attachment)
+                    .id(attachment)
+                    .padding(.top, 20)
+            }
         }
     }
 

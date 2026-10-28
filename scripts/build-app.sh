@@ -32,7 +32,7 @@ PAPERMANAGER_CLI_BUILD_DIR="$APP_DIR/Contents/Helpers" "$PROJECT_DIR/scripts/bui
 cp App/Info.plist "$APP_DIR/Contents/Info.plist"
 for PAIR in CFBundleExecutable:PaperManager CFBundleIdentifier:com.aurelian.PaperManager \
   CFBundleDevelopmentRegion:zh-Hans CFBundleShortVersionString:1.1.0 \
-  CFBundleVersion:20261028.2 LSMinimumSystemVersion:14.0; do
+  CFBundleVersion:20261028.3 LSMinimumSystemVersion:14.0; do
   /usr/bin/plutil -replace "${PAIR%%:*}" -string "${PAIR#*:}" "$APP_DIR/Contents/Info.plist"
 done
 ICON_SET="$STAGING_DIR/PaperManager.iconset"

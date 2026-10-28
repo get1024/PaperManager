@@ -16,7 +16,7 @@
   },
   "imageSHA256": {
     "import-preview.png": "9ad3f134193c242efe6d541681e3e6af7608acfcc3640cab6f1adac03aaac1da",
-    "library.png": "b01aed0b4ba5a6e7185e5ecbc72df713e7880100942611a90d6fd4ab522fde5b",
+    "library.png": "6e3d5dc30d70c0e9af5f91c05430ecec7068759ae4e86c2e70e8f61f1ec55866",
     "templates.png": "8684a55099db0b064a4a8386eee38033d2376353a62583ff4f57e0728a9a5292"
   },
   "images": [
@@ -111,8 +111,8 @@
     "Sources/PaperManager/Views/NativeLibraryTable.swift": "33ac5cf20ed4b82c4b6eefe404d8085413c2587164e7fcf07a002b7e29287117",
     "Sources/PaperManager/Views/NativeLibraryToolbar.swift": "88b33ed3daf0e81837fd63bad8752a78d13145da3d102ef6741566bc923c0dbf",
     "Sources/PaperManager/Views/NativeLibraryView.swift": "359949bd0bbb86bec5be9d73bed7dbdbd9414f27b511faf71825a850dbf159c1",
-    "Sources/PaperManager/Views/PaperDetailView.swift": "a05463cdc9883524de08270effa35c350b134f1a88d6dd39e4b66e770a71f073",
-    "Sources/PaperManager/Views/PaperPDFPreview.swift": "2087d4cef60a434009851e4caa377d2ee35a0154e5f3d151a38749a4efae8eef",
+    "Sources/PaperManager/Views/PaperDetailView.swift": "fdb741eabfc82ef58d0e5c9bdc15e1f0eb0925643d435d73638aa32701c285e7",
+    "Sources/PaperManager/Views/PaperPDFPreview.swift": "c42c9e1f7904f45eafc72c07e7f3ad8689c87c39cd9f7a50d68e9b40ab7c7314",
     "Sources/PaperManager/Views/SettingsView.swift": "aa3199851333dab5a9cf6020429b5596b9e031420b7620f5adc43a3ab9dfbe39",
     "Sources/PaperManager/Views/ViewUtilities.swift": "734c20cab56d6797f6f7761d9ce66bb2b7bca21d4908a5d7f062d874634a254e",
     "Sources/PaperManager/Views/ZoteroImportView.swift": "346f874c51ed98dbcbdb628431fc57ccf181f00743e6c8aa6544152e552846ae"
