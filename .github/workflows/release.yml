@@ -12,6 +12,10 @@ on:
         description: "Release tag to create, for example v1.0.0. Leave blank to build only."
         required: false
         type: string
+      source_ref:
+        description: "Existing tag or commit to build; defaults to the selected branch."
+        required: false
+        type: string
       draft:
         description: "Create the GitHub release as a draft."
         required: true
@@ -36,6 +40,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - name: Check Xcode source and resource membership
         run: python3 scripts/check-project-membership.py
       - name: Run isolated core regressions
@@ -51,6 +57,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Resolve release metadata
         id: vars
@@ -172,7 +179,10 @@ jobs:
           echo "installer_path=$DIST_DIR/$INSTALLER_NAME" >> "$GITHUB_OUTPUT"
           echo "sha_path=$DIST_DIR/$INSTALLER_NAME.sha256" >> "$GITHUB_OUTPUT"
 
+      # Release assets are uploaded directly below; they do not need a second
+      # copy in Actions artifact storage (whose quota must not block releases).
       - name: Upload build artifact
+        if: steps.vars.outputs.is_release != 'true'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ steps.vars.outputs.installer_name }}
@@ -194,7 +204,11 @@ jobs:
           git fetch --tags --force
 
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "Tag $TAG already exists."
+            if [[ "$(git rev-parse "$TAG^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+              echo "Existing tag $TAG does not match this checkout; set source_ref to that tag." >&2
+              exit 1
+            fi
+            echo "Tag $TAG already matches this checkout."
           else
             git tag -a "$TAG" -m "PaperManager $TAG"
             git push origin "$TAG"
