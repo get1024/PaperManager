@@ -39,7 +39,7 @@
 2. 打开 DMG，将 **PaperManager.app** 拖入 **Applications**。
 3. 启动应用，导入 PDF、文件夹、BibTeX 或 RIS，或用 DOI / arXiv / ISBN 查询添加文献。
 
-**系统要求：macOS 14 或更新版本。** 当前发行包使用临时签名（ad-hoc），尚未经过 Apple 公证；首次打开可能受到 macOS 安全机制拦截。发行页同时提供 SHA-256 校验文件。
+**系统要求：macOS 14 或更新版本，支持 Apple Silicon 与 Intel。** 当前发行包使用临时签名（ad-hoc），尚未经过 Apple 公证；首次打开可能受到 macOS 安全机制拦截。发行页同时提供 SHA-256 校验文件。
 
 已有文库可通过 Zotero 导入或 `.papermanager` 备份迁移。批量整理附件或恢复备份前，建议先导出一份当前文库备份。
 
