@@ -24,9 +24,9 @@
   <img src="https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white" alt="原生 Swift 应用" />
 </p>
 
-[![PaperManager 演示文库：文集与标签、文献列表、元数据检查器](docs/images/library.png)](docs/images/library.png)
+[![PaperManager 当前应用界面：文献列表、元数据与 PDF 预览](docs/images/screenshots/library.png)](docs/images/screenshots/library.png)
 
-<p align="center"><sub>独立演示数据 · 使用应用的原生组件渲染</sub></p>
+<p align="center"><sub>macOS 实机截图 · 文献列表、元数据与 PDF 预览</sub></p>
 
 把散落的 PDF 整理成可检索、可引用的文库。PaperManager 将文集、标签、文献列表与元数据编辑放在同一个原生窗口中，帮助你完成从收集资料到整理笔记、导出引用的日常工作。
 
@@ -61,16 +61,16 @@
 
 <table>
   <tr>
-    <td width="50%" align="center"><a href="docs/images/import-preview.png"><img src="docs/images/import-preview.png" alt="BibTeX 导入预览：逐项选择文献并检查重复项" /></a></td>
-    <td width="50%" align="center"><a href="docs/images/templates.png"><img src="docs/images/templates.png" alt="元数据与标注模板编辑器，支持实时预览" /></a></td>
+    <td width="50%" align="center"><a href="docs/images/screenshots/add-paper.png"><img src="docs/images/screenshots/add-paper.png" alt="添加文献菜单：导入文件、通过 DOI 等标识符查询或手动添加" /></a></td>
+    <td width="50%" align="center"><a href="docs/images/screenshots/settings.png"><img src="docs/images/screenshots/settings.png" alt="通用设置：语言、外观、默认 PDF 阅读器与文件库配置" /></a></td>
   </tr>
   <tr>
-    <td align="center"><strong>确认后再导入</strong><br />先检查条目与重复项，再决定保留哪些记录。</td>
-    <td align="center"><strong>按自己的格式导出</strong><br />自定义模板，让文献信息与阅读笔记保持一致。</td>
+    <td align="center"><strong>按资料来源添加</strong><br />导入 PDF、BibTeX、RIS 或文件夹，也可查询或手动录入。</td>
+    <td align="center"><strong>按自己的习惯设置</strong><br />选择语言、外观、PDF 阅读器与本地文件整理方式。</td>
   </tr>
 </table>
 
-图片使用合成演示文库，由生产界面组件渲染，不包含个人文库内容。生成方式与呈现范围见[图片说明](docs/images/README.md)。
+以上为 macOS 实机截图。来源与文件说明见[图片说明](docs/images/README.md)。
 
 ## 本地数据与备份
 
