@@ -96,12 +96,22 @@ struct EditingRegression {
         let (root, store, first, _) = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }
         let editing = PaperDraftSession(autosaveDelayNanoseconds: 20_000_000)
+        // The scheduled task captures its session weakly, just as the view owns
+        // it in production. Keep that owner alive until persistence is checked.
+        defer { withExtendedLifetime(editing) {} }
         editing.select(first.id, in: store)
         var draft = editing.draft; draft.notes = "Partial"
         editing.edit(draft)
         draft.notes = "Final typed text"
         editing.edit(draft)
-        try await Task.sleep(nanoseconds: 80_000_000)
+        // Wait for the observable commit instead of assuming the timer receives
+        // executor time within a fixed 80ms on a busy CI host.
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(2))
+        while store.paper(with: first.id)?.notes != draft.notes,
+              editing.saveError == nil, clock.now < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
         let reloaded = LibraryStore(persistenceURL: store.persistenceURL)
         try expect(reloaded.paper(with: first.id)?.notes == "Final typed text", "Debounced autosave did not persist the newest edit")
     }

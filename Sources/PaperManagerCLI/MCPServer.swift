@@ -34,7 +34,7 @@ struct MCPServer {
                     let supported = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
                     result = ["protocolVersion": supported.contains(requested) ? requested : "2025-11-25",
                               "capabilities": ["tools": ["listChanged": false]],
-                              "serverInfo": ["name": "papermanager", "version": "1.1.0"],
+                              "serverInfo": ["name": "papermanager", "version": "1.1.1"],
                               "instructions": "Read-only by default. Exact UUID/citekey resolution. Writes require an explicitly configured --allow-write and a writable local API."]
                 case "ping": result = [:] as [String: Any]
                 case "tools/list":

@@ -6,11 +6,12 @@
 
 <p align="center">
   <strong>让文献、笔记与引用，各就其位。</strong><br />
-  为 macOS 构建的原生文献管理器。
+  原生 macOS 文献管理器 · 本地文库 · 中文 / English<br />
+  <sub>A native macOS workspace for papers, notes, and citations.</sub>
 </p>
 
 <p align="center">
-  <a href="#quick-start">快速开始</a> ·
+  <a href="https://github.com/get1024/PaperManager/releases/latest"><strong>下载最新 DMG</strong></a> ·
   <a href="#features">功能</a> ·
   <a href="#preview">界面预览</a> ·
   <a href="#development">开发</a> ·
@@ -18,179 +19,125 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/get1024/PaperManager/releases/latest"><img src="https://img.shields.io/github/v/release/get1024/PaperManager?label=release" alt="最新发行版" /></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-18181B?logo=apple&logoColor=white" alt="macOS 14 及以上" />
   <img src="https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white" alt="原生 Swift 应用" />
-  <img src="https://img.shields.io/badge/UI-AppKit%20%2B%20SwiftUI-2563EB" alt="AppKit 与 SwiftUI" />
 </p>
 
-[![演示文库：文集和标签、文献列表、元数据检查器](docs/images/library.png)](docs/images/library.png)
+[![PaperManager 演示文库：文集与标签、文献列表、元数据检查器](docs/images/library.png)](docs/images/library.png)
 
-<p align="center"><sub>演示数据 · 基于当前源码生成的原生组件渲染</sub></p>
+<p align="center"><sub>独立演示数据 · 使用应用的原生组件渲染</sub></p>
 
-PaperManager 将收集、整理、检索与引用放进一个原生 macOS 工作空间。用文集和标签组织资料，在检查器中直接编辑元数据，再将所选文献导出到写作工具。
+把散落的 PDF 整理成可检索、可引用的文库。PaperManager 将文集、标签、文献列表与元数据编辑放在同一个原生窗口中，帮助你完成从收集资料到整理笔记、导出引用的日常工作。
 
-应用使用系统提供的 AppKit、SwiftUI、PDFKit 和 Quick Look，本地文库无需安装 Node.js 或 Python。在线元数据查询会访问 Crossref、arXiv 和 Open Library。
+应用基于 **Swift、AppKit、SwiftUI 和 PDFKit**，文库保存在本地。下载安装包即可使用，无需安装 Node.js 或 Python。
+
+<a id="quick-start"></a>
+## 下载与开始使用
+
+1. 前往 [最新发行版](https://github.com/get1024/PaperManager/releases/latest)，下载 DMG；系统与架构要求见该版本说明。
+2. 打开 DMG，将 **PaperManager.app** 拖入 **Applications**。
+3. 启动应用，导入 PDF、文件夹、BibTeX 或 RIS，或用 DOI / arXiv / ISBN 查询添加文献。
+
+**系统要求：macOS 14 或更新版本。** 当前发行包使用临时签名（ad-hoc），尚未经过 Apple 公证；首次打开可能受到 macOS 安全机制拦截。发行页同时提供 SHA-256 校验文件。
+
+已有文库可通过 Zotero 导入或 `.papermanager` 备份迁移。批量整理附件或恢复备份前，建议先导出一份当前文库备份。
 
 <a id="features"></a>
-## 功能
+## 从收集到写作
 
-| 从收集到写作 | 你可以做什么 |
+| 工作环节 | PaperManager 提供的能力 |
 |---|---|
-| **收集文献** | 导入 PDF、BibTeX、RIS 或文件夹；使用 DOI、arXiv、ISBN 或标题查询；提交前预览并处理重复项。 |
-| **整理资料** | 使用最多三级文集、彩色标签和评分组织文库；管理 PDF 与附件，按规则整理或重命名文件。 |
-| **快速检索** | 搜索标题、作者、标识符、摘要、备注和自定义字段；排序、多选、调整列宽，独立收起两侧面板。 |
-| **完善记录** | 编辑 15 种文献类型，维护引用键、自定义字段、摘要和备注；批量刷新元数据并查看进度。 |
-| **阅读与引用** | 在作者信息下方逐页预览 PDF；使用外部阅读器或 Quick Look 阅读，提取标注、导出引用。 |
-| **迁移与连接** | 使用 `.papermanager` 可移植备份，导入 `.lattice` 或 Zotero 文库；通过可选本地 API、CLI 和 MCP 连接其他工具。 |
+| **收集文献** | 导入 PDF、文件夹、BibTeX、RIS；按 DOI、arXiv、ISBN 或标题查询；导入前检查元数据与重复项。 |
+| **整理文库** | 最多三级文集、彩色标签、评分；管理 PDF 和其他附件，按规则整理或重命名文件。 |
+| **查找资料** | 搜索标题、作者、标识符、摘要、备注与自定义字段；支持排序、多选、调整列宽和收起侧栏。 |
+| **完善元数据** | 支持 15 种文献类型；直接编辑字段、引用键、摘要与备注，批量刷新在线元数据。 |
+| **预览与阅读** | 在文献详情中逐页预览 PDF；通过 Quick Look 或外部阅读器阅读，提取 PDF 标注。 |
+| **导出与写作** | 导出 BibTeX、RIS、Markdown；自定义元数据与标注模板，让笔记和引用贴合写作习惯。 |
+| **备份与连接** | `.papermanager` 可移植备份、Zotero 导入；可选本地 API、CLI、MCP 和浏览器连接器。 |
 
 <a id="preview"></a>
 ## 界面预览
 
 <table>
   <tr>
-    <td width="50%" align="center"><a href="docs/images/import-preview.png"><img src="docs/images/import-preview.png" alt="BibTeX 导入预览：逐项选择并确认文献" /></a></td>
-    <td width="50%" align="center"><a href="docs/images/templates.png"><img src="docs/images/templates.png" alt="元数据模板：自定义导出内容并实时预览" /></a></td>
+    <td width="50%" align="center"><a href="docs/images/import-preview.png"><img src="docs/images/import-preview.png" alt="BibTeX 导入预览：逐项选择文献并检查重复项" /></a></td>
+    <td width="50%" align="center"><a href="docs/images/templates.png"><img src="docs/images/templates.png" alt="元数据与标注模板编辑器，支持实时预览" /></a></td>
   </tr>
   <tr>
-    <td align="center"><strong>确认后再导入</strong><br />先检查元数据与重复项，再决定保留哪些记录。</td>
-    <td align="center"><strong>按写作习惯导出</strong><br />自定义元数据模板，让引用与笔记保持一致。</td>
+    <td align="center"><strong>确认后再导入</strong><br />先检查条目与重复项，再决定保留哪些记录。</td>
+    <td align="center"><strong>按自己的格式导出</strong><br />自定义模板，让文献信息与阅读笔记保持一致。</td>
   </tr>
 </table>
 
-图中使用独立演示文库；图片由当前生产组件渲染。生成方式与来源记录见[图片说明](docs/images/README.md)。
+图片使用合成演示文库，由生产界面组件渲染，不包含个人文库内容。生成方式与呈现范围见[图片说明](docs/images/README.md)。
 
-<a id="quick-start"></a>
-## 快速开始
+## 本地数据与备份
 
-从 [GitHub Releases](https://github.com/get1024/PaperManager/releases/latest) 下载最新 DMG，将应用拖入 Applications。发行包使用临时签名，尚未公证。
+- **文库保存在本机。** 文献元数据以本地 JSON 保存；PDF 可保留原位，也可按文件库设置复制或移动。
+- **在线查询按需使用。** DOI、arXiv、ISBN 和标题查询会访问 Crossref、arXiv 或 Open Library；相关查询需要联网。
+- **备份可以携带附件。** 在设置中导出 `.papermanager` 备份，用于迁移和恢复文库。
+- **本地 API 默认关闭。** 启用后仅监听本机 loopback 地址；CLI 默认只读，写入还需应用端允许。
 
-**运行要求：macOS 14 或更新版本。** 从源码构建需要可用的 Xcode 或 Command Line Tools，以及与源码 API 匹配的 macOS SDK。
+更多路径与备份说明见[数据与目录说明](docs/LOCAL_LAYOUT.md)。
+
+## CLI、MCP 与浏览器
+
+在「设置 → 集成」开启本地 API 后，可通过应用内置 CLI 查询文库，或使用 stdio MCP 接入支持的客户端。设置页支持导出 Agent Skill 和 MCP 配置。
+
+```sh
+# 将路径替换为实际安装位置
+/Applications/PaperManager.app/Contents/Helpers/PaperManagerCLI status
+/Applications/PaperManager.app/Contents/Helpers/PaperManagerCLI search --query transformer
+/Applications/PaperManager.app/Contents/Helpers/PaperManagerCLI mcp
+```
+
+浏览器连接器以可手动载入的 MV3 源码包提供，支持网页元数据预览和可选 PDF 上传；源码随应用打包。
+
+[集成文档](docs/INTEGRATIONS.md) · [浏览器连接器与安装步骤](BrowserExtension/README.md)
+
+<a id="development"></a>
+## 从源码构建
+
+需要 macOS 14+、Xcode 或 Command Line Tools，以及与源码 API 匹配的 macOS SDK。默认构建当前主机架构的 Release 应用。
 
 ```sh
 git clone https://github.com/get1024/PaperManager.git
 cd PaperManager
 scripts/build-app.sh
-scripts/install-app.sh
+scripts/run-app.sh
 ```
 
-随后从 `~/Applications/PaperManager.app` 启动，或双击仓库中的 **Launch PaperManager.command**。
-
-- 构建产物位于 `dist/PaperManager.app`。默认安装后，该路径成为指向正式应用的链接。
-- 正式构建使用 `-Osize` 全模块优化，匹配当前主机架构。
-- 本地构建使用临时签名；当前没有提供经过公证的发行包。
+构建产物为 `dist/PaperManager.app`。如需安装到 `~/Applications`，运行 `scripts/install-app.sh`；安装后 `dist/PaperManager.app` 默认链接到该位置。
 
 <details>
-<summary>开发运行、调试构建与自定义输出</summary>
+<summary>调试构建与自定义输出</summary>
 
 ```sh
-# 直接启动仓库中的应用；尚未构建时自动构建
-scripts/run-app.sh
-
-# 带调试信息构建
 PAPERMANAGER_BUILD_CONFIGURATION=debug scripts/build-app.sh
-
-# 输出到指定目录
 PAPERMANAGER_BUILD_DIR=/tmp/PaperManagerBuild scripts/build-app.sh
 
-# 仅验证 SwiftPM 可执行产品；此命令不生成 .app
+# 仅编译 SwiftPM 可执行产品，不生成 .app
 scripts/build-swiftpm.sh -c release
 ```
 
-更多工具链和路径配置见[开发说明](docs/DEVELOPMENT.md)。
-
 </details>
 
-## 数据与备份
-
-文库以本地 JSON 保存。首次使用采用应用默认位置；选择其他文库后，启动时会沿用有效的偏好路径。PDF 可以保留原位，也可以按文件库设置复制或移动。
-
-检查器中的元数据编辑在原子写盘成功后才发布成功状态；写入失败保留草稿。恢复和文件整理会检查并发变更；文件操作失败时尝试回滚，并报告未能完成的部分。迁移或批量整理前，建议先在设置中导出一份 `.papermanager` 备份。
-
-个人文库、PDF、备份和凭据不进入源码仓库。路径规则见[数据与目录说明](docs/LOCAL_LAYOUT.md)。
-
-## CLI、MCP 与浏览器
-
-本地 API **默认关闭**。在「设置 → 集成」启用后，可以开启只读模式并调整端口。CLI **默认只读**；写操作还必须得到应用端允许。
+### 测试与贡献
 
 ```sh
-dist/PaperManager.app/Contents/Helpers/PaperManagerCLI status
-dist/PaperManager.app/Contents/Helpers/PaperManagerCLI search --query transformer
-dist/PaperManager.app/Contents/Helpers/PaperManagerCLI mcp
-```
-
-设置页支持导出 Agent Skill 和 MCP 配置。浏览器连接器提供可手动载入的 MV3 源码包，支持页面元数据预览和可选 PDF 上传。
-
-[集成文档](docs/INTEGRATIONS.md) · [浏览器连接器](BrowserExtension/README.md)
-
-<a id="development"></a>
-## 开发
-
-```sh
+python3 scripts/check-project-membership.py
 scripts/test.sh core      # 数据、导入导出、持久化、API、CLI / MCP
 scripts/test.sh ui        # 原生布局、表单、选区与编辑
 scripts/test.sh ax        # 跨进程辅助功能
-scripts/clean.sh          # 清理中间产物，保留最新测试日志
 ```
 
-UI 测试需要 macOS 图形会话；AX 测试还需已有的辅助功能权限。连接器测试使用 Node.js 18+，工程成员检查使用 Python；这些都是开发工具，不是应用运行依赖。
+UI 测试需要 macOS 图形会话，AX 测试需要辅助功能权限。浏览器连接器测试使用 Node.js 18+，工程成员检查使用 Python；这些属于开发依赖。
 
-```text
-Sources/
-├── PaperManager/
-│   ├── Models/       文献、组织关系与设置
-│   ├── Services/     查询、持久化、导入导出与集成
-│   ├── Views/        原生界面与窗口协调
-│   └── Intents/      App Intents
-└── PaperManagerCLI/  CLI 与 stdio MCP
-Tests/               隔离文库、原生 UI 与连接器回归
-scripts/             构建、启动、测试与维护入口
-```
+应用与 CLI 是两个独立编译目标，应用内部按模型、服务、界面和 App Intents 组织。开始贡献前，请阅读[开发说明](docs/DEVELOPMENT.md)、[测试说明](docs/TESTING.md)和[架构与重构约定](docs/REFACTORING.md)。验证改动时使用临时文库；新增源文件需同步更新 Xcode 工程与相关测试入口。
 
-### 架构与参与开发
+## 当前范围与反馈
 
-应用当前采用 **按职责分层的单体架构**：App 与 CLI 是两个独立编译目标，App 内部按模型、服务、界面组织。目录划分提供清晰入口，但尚未由独立 Swift Package 强制隔离依赖；新增功能应继续收窄边界。
+PaperManager 已实现本地文献管理、导入导出、备份和本地工具集成。PDF 支持详情预览与外部阅读，不包含内置完整阅读器或阅读时长统计。浏览器连接器仍需手动载入；Safari 签名发行与 Shortcuts 系统注册尚未完成验证。
 
-```mermaid
-flowchart TD
-    UI[AppKit 列表 / SwiftUI 检查器] --> Draft[PaperDraftSession 草稿合并]
-    UI --> Preview[PDFPreviewService 缩略图]
-    Draft --> Store[LibraryStore 事务与状态]
-    Store --> Query[LibraryQuery 查询与索引]
-    Store --> IO[导入 / 备份 / 文件库 / 元数据服务]
-    Store --> JSON[本地 JSON 原子写入]
-    Preview --> PDF[PDFKit / 附件访问]
-    CLI[CLI / MCP / 浏览器连接器] --> API[本地 API]
-    API --> Store
-```
-
-| 修改需求 | 从这里开始 | 边界与约定 |
-|---|---|---|
-| 字段与兼容性 | `Models/LibraryModels.swift` | 新增可选字段兼容旧文库；模型不调用界面或网络。 |
-| 查询与排序 | `Services/LibraryQuery.swift` | 数据计算不直接更新界面或写盘。 |
-| 持久化与操作协调 | `Services/LibraryStore.swift` | 先原子写盘，再发布状态；失败保留可恢复数据。 |
-| PDF 缩略图 | `Services/PDFPreviewService.swift`、`Views/PaperPDFPreview.swift` | 后台渲染单页、限制图像大小；取消的请求不能回填到新条目。 |
-| 列表与侧栏 | `Views/NativeLibrary*.swift` | AppKit 管理复用、选区、键盘与辅助功能；回调交给服务执行。 |
-| 元数据编辑 | `Views/PaperDetailView.swift`、`InspectorInlineEditor.swift` | 草稿和提交分开；延迟编辑只合并用户修改的字段。 |
-| 外部工具 | `Sources/PaperManagerCLI`、`Services/LocalAPIServer.swift` | CLI 通过 HTTP 协议访问应用，不直接改写文库 JSON。 |
-
-2026-10-28 架构审核：列表、查询、文件服务已具备独立职责；PDF 渲染与预览布局分别由服务和独立视图负责。主要耦合仍集中在 `LibraryStore`（约 1,300 行）、`PaperDetailView` 和 `SettingsView`（各约 1,300 行）；若继续增加功能，应按用例拆出协调器、检查器小节和设置页面，并为文件与网络边界注入接口。现有部分测试手动枚举源文件，也是后续统一测试目标时应消除的维护成本。这里不会把目录分层宣称为已经完成的包级模块化。
-
-第一次贡献可以按以下步骤完成：
-
-1. 在对应目录找到入口，先运行该功能的 `scripts/test-*.sh`，确认已有行为。
-2. 将业务规则写入模型或服务，界面只保存短期交互状态并调用服务；避免新增全局可变状态和直接 JSON 写入。
-3. 新增源文件同步登记 Xcode 工程及相关测试脚本，运行 `python3 scripts/check-project-membership.py`。
-4. 用临时文库验证改动，执行 `scripts/test.sh core`；涉及界面时加跑 `ui` 与 `ax`。不要用个人文库做写入测试。
-5. 提交小而完整的改动，说明用户行为、兼容性、测试结果和未验证范围。
-
-### PDF 预览
-
-标题、作者和引用键按阅读顺序左对齐，使用检查器完整宽度。PDF 预览独立放在这组信息下方并居中，保持页面纵横比，下方保留原生上一页／下一页按钮。没有 PDF 时不显示预览；缺失、损坏或加密文件显示紧凑提示。
-
-应用不提供阅读时间与阅读进度统计，也不提供内部 PDF 阅读器。旧版文库中的统计字段不会影响加载；之后保存文库时不再写出这些已移除的字段。
-
-[开发说明](docs/DEVELOPMENT.md) · [测试说明](docs/TESTING.md) · [重构约定与本轮验证](docs/REFACTORING.md)
-
-## 当前状态
-
-核心文献管理、导入导出、备份和本地集成已经实现。浏览器连接器仍以源码包交付；Safari 签名发行和 Shortcuts 系统注册尚未完成验证。
+欢迎在 [Issues](https://github.com/get1024/PaperManager/issues) 提交问题与建议。反馈时请附 macOS 版本、PaperManager 版本和复现步骤；涉及文库内容时，可使用脱敏样例。
